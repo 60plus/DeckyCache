@@ -1,6 +1,6 @@
 {
   "name": "deckycache",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "description": "Puts an SSD or NVMe drive in front of a game library that lives on a slower disk.",
   "type": "module",
   "license": "BSD-3-Clause",

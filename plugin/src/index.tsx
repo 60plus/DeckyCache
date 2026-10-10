@@ -33,7 +33,15 @@ const trackedSize = (n: number) => n >= 1024 ** 3
   : n >= 1024 ** 2
     ? (n / 1024 ** 2).toLocaleString("en-US", { maximumFractionDigits: 1 }) + " MiB"
     : (n / 1024).toLocaleString("en-US", { maximumFractionDigits: 0 }) + " KiB";
+type Compatibility = { kernel: string; bundled_kernels: string[]; supported: boolean; message: string };
+type UpdateInfo = { installed: string; compatibility: Compatibility; candidate: { version: string; kernel: string } | null };
+type UpdateResult<T> = { ok: true; data: T } | { ok: false; error: string };
+const checkUpdates = callable<[], UpdateResult<UpdateInfo>>("check_updates");
+const prepareUpdate = callable<[], UpdateResult<{ artifact: string; version: string; sha256: string }>>("prepare_update");
+type Installer = { call: (route: string, ...args: unknown[]) => Promise<unknown> };
+
 type Status = {
+  enabled: boolean; compatibility: Compatibility;
   engine: "opencas" | "dm-cache";
   cache: { uuid: string; model: string; serial: string } | null;
   devices: Disk[]; libraries: Library[]; games: Game[]; games_state: "ready" | "updating" | "unavailable"; error: string;
@@ -80,6 +88,8 @@ function Panel() {
   const [error, setError] = useState("");
   const [changeDisk, setChangeDisk] = useState(false);
   const [showSmall, setShowSmall] = useState(false);
+  const [update, setUpdate] = useState<UpdateInfo | null>(null);
+  const [updateMessage, setUpdateMessage] = useState("");
   const running = useRef(false);
   const refreshing = useRef(false);
   const alive = useRef(true);
@@ -116,6 +126,37 @@ function Panel() {
       } else setError(r.error);
     } catch (e) { setError(String(e)); }
     finally { running.current = false; setWorking(""); }
+  }
+
+  async function updatePlugin() {
+    if (running.current) return;
+    running.current = true;
+    setWorking(update?.candidate ? "Preparing update..." : "Checking GitHub...");
+    setError(""); setUpdateMessage("");
+    try {
+      if (!update?.candidate) {
+        const result = await checkUpdates();
+        if (!result.ok) throw new Error(result.error);
+        setUpdate(result.data);
+        if (!result.data.candidate) setUpdateMessage(result.data.compatibility.supported
+          ? "No newer compatible release." : "No update for this kernel yet. Games use the original drive.");
+      } else {
+        const installer = (globalThis as unknown as { DeckyBackend?: Installer }).DeckyBackend;
+        if (!installer?.call) throw new Error("This Decky version cannot open the installer. Use the ZIP from GitHub Releases.");
+        const result = await prepareUpdate();
+        if (!result.ok) throw new Error(result.error);
+        await installer.call("utilities/install_plugin", result.data.artifact, "DeckyCache",
+          result.data.version, result.data.sha256, 2);
+        setUpdateMessage("Confirm the Decky installer. Cache stays off until you enable it.");
+        setUpdate(null);
+      }
+    } catch (e) { setError(String(e)); }
+    finally { running.current = false; setWorking(""); void refresh(); }
+  }
+
+  function toggleCache(enabled: boolean) {
+    void act({ action: "enabled", enabled },
+      enabled ? "Enabling DeckyCache..." : "Switching off DeckyCache...");
   }
 
   const available = state?.devices.filter(d => !d.blocked) ?? [];
@@ -196,6 +237,26 @@ function Panel() {
   return <>
     {error && <PanelSection><div role="alert" style={{ ...note, color: "#ffae97" }}>{error}</div></PanelSection>}
     {working && <PanelSection><div style={note}>{working}</div><ProgressBar indeterminate /></PanelSection>}
+    <PanelSection>
+      <SectionHeading title="DeckyCache" help={<>
+        <p>SteamOS Stable only. Beta, Preview and Main are not supported.</p>
+        <p>The master switch keeps your cache drive and library selections. Switching off bypasses the cache and keeps valid cached blocks. Reads use the HDD.
+          Steam writes and updates invalidate only affected cached blocks, so old data is never reused.</p>
+        <p>Updates come from the DeckyCache GitHub releases and must include a module for the running kernel.
+          The ZIP and bundled modules are checked before opening the Decky installer.</p>
+        <p>Close games and finish Steam downloads before installing an update. Enable cache again after installation.</p>
+        {(state?.compatibility ?? update?.compatibility) && <p>Kernel: {(state?.compatibility ?? update?.compatibility)?.kernel}</p>}
+      </>} />
+      {state && <PanelSectionRow><ToggleField label="Enable DeckyCache"
+        checked={state.enabled} disabled={!!working || (!state.enabled && !state.compatibility.supported)}
+        onChange={toggleCache} /></PanelSectionRow>}
+      {state && !state.compatibility.supported && <div style={note}>{state.compatibility.message}</div>}
+      <div style={{ marginTop: 16 }}><PanelSectionRow><DialogButton disabled={!!working} onClick={() => void updatePlugin()}>
+        {update?.candidate ? "Update to " + update.candidate.version : "Check for updates"}
+      </DialogButton></PanelSectionRow></div>
+      {updateMessage && <div style={note}>{updateMessage}</div>}
+    </PanelSection>
+    <SectionDivider />
     {!state ? <PanelSection><div style={note}>Loading drives and libraries…</div></PanelSection> : <>
       <PanelSection>
         <SectionHeading title="Cache drive" help={<>
@@ -206,7 +267,7 @@ function Panel() {
         {state.cache && <>
           <div style={{ fontWeight: 600 }}>{state.cache.model}</div>
           <div style={{ ...note, color: state.error ? "#ffb48a" : "#70d4b0" }}>
-            {state.error || (active ? "Active · " + active + (active === 1 ? " partition" : " partitions") : "Ready · select one or more drives below")}
+            {state.error || (!state.enabled ? "Off - reads use the HDD" : active ? "Active · " + active + (active === 1 ? " partition" : " partitions") : "Ready · select one or more drives below")}
           </div>
           {state.usage && <>
             <ProgressBar nProgress={100 * state.usage.used / state.usage.total} />
@@ -245,7 +306,7 @@ function Panel() {
         </>} />
         {state.libraries.map(lib => <PanelSectionRow key={lib.path}>
           <ToggleField label={lib.name}
-            description={lib.error || (lib.enabled && !lib.active ? "Waiting for cache" : undefined)}
+            description={lib.error || (lib.enabled && !lib.active ? (state.enabled ? "Waiting for cache" : "Cache disabled") : undefined)}
             checked={lib.enabled} disabled={!!working || !state.cache}
             onChange={enabled => void act({ action: "library", path: lib.path, enabled }, "Saving drive selection…")}
           />

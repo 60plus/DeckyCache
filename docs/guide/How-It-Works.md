@@ -20,6 +20,15 @@ It is attached using direct I/O, so the backing image does not create a second L
 Approximately 10% of the SSD filesystem capacity stays outside these allocations.
 The panel reports Open CAS occupancy, not the allocated image size.
 
+## Master switch
+
+ON uses writethrough. OFF switches the same mounted cache device to passthrough:
+reads use the HDD, valid cached blocks remain on the SSD, and writes invalidate overlapping cached lines.
+Turning caching back on can reuse the unaffected data. This also keeps Steam updates coherent while OFF.
+
+Installing a plugin update is separate: libraries are detached to direct HDD access before Decky replaces
+the plugin, and remain off until explicitly enabled. Cache may rebuild after that direct access.
+
 ## Persistent cache
 
 During a clean shutdown, the service unmounts the library, stops Open CAS normally, syncs the image

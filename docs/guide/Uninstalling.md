@@ -5,6 +5,9 @@
 3. Wait for the operation to finish. The original HDD libraries should remain available.
 4. Open **Decky Loader settings → Plugins** and uninstall **DeckyCache**.
 
+The master **Enable DeckyCache** switch alone only bypasses caching; it does not detach the drive.
+Use the individual **Library drives** switches for removal.
+
 If disabling a library reports that the drive is busy, resolve that message before removing the plugin.
 Do not delete plugin files manually while its cache device is active.
 

@@ -107,7 +107,7 @@ class LifecycleCheck(unittest.TestCase):
         with patch.object(service, "RUN", run), patch.object(service, "STATE", state), \
                 patch.object(service.fcntl, "flock", side_effect=acquire), \
                 patch.object(service, "Manager") as manager:
-            for action in ("format", "reuse", "library", "reconcile", "migrate-opencas", "clear-cache"):
+            for action in ("format", "reuse", "library", "reconcile", "migrate-opencas", "clear-cache", "enabled", "prepare-update"):
                 with self.subTest(action=action):
                     stopping.unlink(missing_ok=True)
                     with self.assertRaisesRegex(RuntimeError, "Cache is stopping"):

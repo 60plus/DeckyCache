@@ -20,11 +20,11 @@ This plugin does not rebuild or replace it; another kernel needs a matching modu
 
 DeckyCache puts an SSD or NVMe cache in front of selected game-drive partitions.
 Original games stay on the HDD. The panel handles drive preparation, library selection
-and clearing cached copies.
+clearing cached copies, a master switch and compatible GitHub updates.
 
 | Start here | What it covers |
 | --- | --- |
-| [Installation](Installation.md) | Download the plugin ZIP and install it through Decky Developer settings. |
+| [Installation](Installation.md) | Install the ZIP through Decky Developer settings, then use the built-in updater. |
 | [First setup](Setup.md) | Select, format or reuse the cache drive; enable library drives. |
 | [Everyday use](Daily-Use.md) | Cached games, small fragments, clearing cache and Steam updates. |
 | [Compatibility](Compatibility.md) | Supported filesystem, exact kernel bundle and update requirements. |

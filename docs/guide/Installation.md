@@ -4,6 +4,7 @@
 
 | Requirement | Current bundle |
 | --- | --- |
+| **Supported SteamOS channel** | **Stable only**. Beta, Preview and Main are not supported. |
 | **Tested SteamOS** | **3.8.28**, build **20260922.1**, on an NVIDIA x86-64 PC |
 | **Required kernel** | `6.18.50-valve2-1-neptune-618-gc7289a96b14d` |
 | **Library drives** | Separate **ext4 data partitions** |
@@ -64,6 +65,22 @@ If the download requires a browser login, use **Option A**; Decky does not inher
 Return to the Decky menu and open **DeckyCache**.
 Continue with [First setup](Setup.md) to select the cache drive and library partitions.
 
-To install a later plugin release, close games and finish Steam updates, then use the
-new release's plugin ZIP through the same Developer screen.
-Check its supported kernel before installing.
+## Updating the plugin
+
+1. Close games and finish Steam downloads or updates.
+2. Open DeckyCache and select **Check for updates**.
+3. If a compatible release is available, select **Update to** the offered version.
+4. Confirm Decky's normal installation prompt. Decky replaces and reloads the plugin automatically;
+   no PC restart is needed for the plugin update.
+5. Reopen DeckyCache and turn **Enable DeckyCache** on when ready.
+
+The updater selects stable releases from this project's GitHub repository containing a bundle for
+exactly the running kernel. It verifies the ZIP and bundled modules before preparing storage for installation.
+It does not compile modules or choose an incompatible release just because it is newer.
+
+Update preparation returns libraries to direct HDD access. Drive selections are kept, but cache stays off
+after installation or a cancelled installer. Cached data may refill when you enable it again.
+The regular master OFF/ON switch preserves valid cached blocks; installation is a separate operation.
+
+If your installed version has no update button, install a newer plugin ZIP once through the Developer screen.
+Manual ZIP installation remains available. Check its supported kernel before installing.

@@ -14,6 +14,7 @@ import time
 from block_cache import BlockCache
 from opencas_cache import OpenCasCache
 from resident_games import resident_games, ScanChanged
+from compatibility import compatibility
 
 STATE = Path("/home/.deckycache")
 RUN = Path("/run/deckycache")
@@ -115,6 +116,7 @@ class Manager:
                 raise RuntimeError("Disable the previous NFS folder cache before upgrading.")
             self.config.update(version=3, libraries=[])
             self.config.pop("shaders", None)
+        self.config.setdefault("enabled", True)
         engine = OpenCasCache if self.config.get("engine") == "opencas" else BlockCache
         self.block = engine(self, command, mounts, tree, flatten, busy, CACHE)
 
@@ -129,7 +131,7 @@ class Manager:
         # Plymouth otherwise takes the display while Gamescope is still exiting.
         # Wait for the user session and the clean cache checkpoint before showing
         # the shutdown splash. This does not alter the startup order or drivers.
-        enabled = bool(self.config["libraries"]) and Path("/sys/module/nvidia").is_dir()
+        enabled = bool(self.config["libraries"]) and not self.config.get("update_pending", False) and Path("/sys/module/nvidia").is_dir()
         marker = "# Managed by DeckyCache: finish session and cache before shutdown splash.\n"
         content = marker + "[Unit]\nAfter=user@" + str(USER.pw_uid) + ".service deckycache.service\n"
         changed = False
@@ -158,7 +160,8 @@ class Manager:
         override = Path("/etc/udev/rules.d/99-steamos-automount.rules")
         legacy = rule.with_name("99-zz-deckycache.rules")
         marker = "# Managed by DeckyCache: skip selected cache/library devices.\n"
-        uuids = [lib["uuid"] for lib in self.config["libraries"]]
+        selected = [] if self.config.get("update_pending", False) else self.config["libraries"]
+        uuids = [lib["uuid"] for lib in selected]
         if self.config["cache"]:
             uuids.append(self.config["cache"]["uuid"])
         # A fresh plugin with no selected disks must not alter automount rules
@@ -170,7 +173,7 @@ class Manager:
         # origins from UDisks automounting them before cache restoration.
         lines = ['SUBSYSTEM=="block", ENV{DECKYCACHE_MANAGED}=="1", ENV{UDISKS_IGNORE}="", ENV{DECKYCACHE_MANAGED}=""',
                  'SUBSYSTEM=="block", ENV{DM_NAME}=="deckycache-*", ENV{UDISKS_IGNORE}="1", ENV{DECKYCACHE_MANAGED}="1"']
-        for lib in self.config['libraries']:
+        for lib in selected:
             if self.config.get('engine') == 'opencas' and lib.get('cas_id'):
                 lines.append('SUBSYSTEM=="block", KERNEL=="cas' + str(int(lib['cas_id'])) + '-*", ENV{UDISKS_IGNORE}="1", ENV{DECKYCACHE_MANAGED}="1"')
         for uuid in sorted(set(uuids)):
@@ -302,7 +305,7 @@ class Manager:
 
     def stop_all(self, preserve=False):
         targets = dict(self.runtime)
-        if not preserve:
+        if not preserve and not self.config.get("update_pending", False):
             if self.config["cache"] and self.cache_partition():
                 self.ensure_cache()
             targets.update({lib["id"]: lib for lib in self.config["libraries"]})
@@ -373,8 +376,72 @@ class Manager:
         self.save()
         self.reconcile()
 
+    def set_enabled(self, enabled):
+        if not isinstance(enabled, bool):
+            raise RuntimeError("Choose whether DeckyCache should be enabled.")
+        if enabled and isinstance(self.block, OpenCasCache) and not compatibility()["supported"]:
+            raise RuntimeError(compatibility()["message"])
+        targets = {lib["id"]: lib for lib in self.config["libraries"]}
+        targets.update(self.runtime)
+        if any(busy(lib["path"]) for lib in targets.values()):
+            raise RuntimeError("Close games and wait for Steam updates before changing DeckyCache.")
+        old_mode = "wt" if self.config.get("enabled", True) else "pt"
+        changed = []
+        try:
+            for lib in targets.values():
+                if self.block.table(lib):
+                    if isinstance(self.block, OpenCasCache):
+                        self.block.set_mode(lib, "wt" if enabled else "pt")
+                        changed.append(lib)
+                    elif not enabled:
+                        self.deactivate(lib)
+        except Exception:
+            for lib in changed:
+                try:
+                    self.block.set_mode(lib, old_mode)
+                except Exception:
+                    pass  # Reconcile retries the saved mode.
+            raise
+        self.config.update(enabled=enabled, update_pending=False)
+        self.errors = {}
+        self.save()
+        self.reconcile()
+
+    def prepare_update(self):
+        targets = {lib["id"]: lib for lib in self.config["libraries"]}
+        targets.update(self.runtime)
+        if any(busy(lib["path"]) for lib in targets.values()):
+            raise RuntimeError("Close games and wait for Steam updates before installing an update.")
+        for lib in targets.values():
+            if self.block.table(lib):
+                self.deactivate(lib)
+        # Keep raw HDD access while the installer replaces files, even if the
+        # user cancels. The next explicit enable clears this hold.
+        self.config.update(enabled=False, update_pending=True)
+        self.errors = {}
+        self.save()
+        self.reconcile()
+
+    def restore_originals(self):
+        for lib in self.config["libraries"]:
+            try:
+                # Never mount an origin while a cache still owns it.
+                if not self.block.table(lib) and lib["path"] not in mounts():
+                    self.block.mount_original(lib, self.block.origin(lib))
+            except Exception as error:
+                self.errors[lib["id"]] = str(error)
+
     def reconcile(self):
         self.errors = {}
+        if self.config.get("update_pending", False) or (not self.config.get("enabled", True) and not isinstance(self.block, OpenCasCache)):
+            self.restore_originals()
+            save_json(RUN / "errors.json", self.errors)
+            return
+        if isinstance(self.block, OpenCasCache) and not compatibility()["supported"]:
+            self.errors["cache"] = compatibility()["message"]
+            self.restore_originals()
+            save_json(RUN / "errors.json", self.errors)
+            return
         if not self.config["cache"]:
             return
         try:
@@ -480,7 +547,8 @@ class Manager:
             except (OSError, ValueError, KeyError, RuntimeError, subprocess.TimeoutExpired) as error:
                 print("Cached game inspection: " + str(error), file=sys.stderr, flush=True)
                 games_state = "unavailable"
-        return {"engine": self.config.get("engine", "dm-cache"),
+        return {"enabled": self.config.get("enabled", True), "compatibility": compatibility(),
+                "engine": self.config.get("engine", "dm-cache"),
                 "cache": self.config["cache"], "devices": self.devices(), "usage": usage,
                 "libraries": libs, "games": games, "games_state": games_state,
                 "error": self.errors.get("cache", "")}
@@ -538,6 +606,10 @@ class Manager:
         action = request["action"]
         if action in ("format", "reuse"):
             self.select_disk(request["path"], request["token"], action == "format")
+        elif action == "prepare-update":
+            self.prepare_update()
+        elif action == "enabled":
+            self.set_enabled(request.get("enabled"))
         elif action == "clear-cache":
             self.clear_cache(request)
         elif action == "library":
@@ -562,7 +634,7 @@ def locked_action(request):
         fcntl.flock(lock, fcntl.LOCK_EX)
         # A request may have waited behind checkpoint after watch checked the
         # marker. Recheck under the lock so it cannot remount a stopped cache.
-        if request.get("action") in ("format", "reuse", "library", "reconcile", "migrate-opencas", "clear-cache") and (RUN / "stopping").exists():
+        if request.get("action") in ("format", "reuse", "library", "reconcile", "migrate-opencas", "clear-cache", "enabled", "prepare-update") and (RUN / "stopping").exists():
             raise RuntimeError("Cache is stopping. Start the cache service before changing drives.")
         return Manager().action(request)
 
@@ -587,7 +659,7 @@ if __name__ == "__main__":
         while time.monotonic() < deadline:
             manager = Manager()
             try:
-                if not manager.config["cache"]:
+                if not manager.config["cache"] or manager.config.get("update_pending", False):
                     break
                 if manager.cache_partition():
                     for lib in manager.config["libraries"]:

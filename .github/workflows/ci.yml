@@ -17,3 +17,4 @@ jobs:
       - run: python3 -m py_compile plugin/*.py scripts/*.py
       - run: python3 scripts/check-opencas.py
       - run: python3 scripts/check-service-lifecycle.py
+      - run: python3 scripts/check-updates.py

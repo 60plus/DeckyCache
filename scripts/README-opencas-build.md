@@ -35,3 +35,20 @@ A future kernel needs a separately built matching bundle; there is no automatic 
 
 The adapter smoke check must be run as root in the host mount namespace with the staged plugin directory on PYTHONPATH.
 It creates only private disposable images. Never substitute the user's devices for its loop-backed origin.
+
+
+## Release metadata for the in-plugin updater
+
+The packaging script also writes `SHA256SUMS` and `deckycache-update.json`.
+For releases that include the updater, attach all three files to the same
+GitHub release: the plugin ZIP, `SHA256SUMS` and `deckycache-update.json`.
+
+The update manifest lists the exact supported kernels and the ZIP SHA256.
+Only SteamOS Stable is supported. A stable release must use a numeric
+`major.minor.patch` version and a matching `v` tag, and must not be a GitHub
+prerelease. Development builds are not offered by the updater.
+Never edit a published ZIP in place; publish a newer version when adding a
+kernel bundle. Keep the prior bundles if the new plugin still supports them.
+
+The initial 0.4.4 release does not have an in-plugin updater. Install a
+release containing that feature through Decky's ZIP installer once.

@@ -125,7 +125,7 @@ class OpenCasCache(BlockCache):
         self.verify_cache_device(lib)
         cache = self.stats(lib, "-f", "conf,usage,req")
         core = self.stats(lib, "-j", "1", "-f", "conf")
-        if (cache.get("Write Policy") != "wt" or cache.get("Status") != "Running"
+        if (cache.get("Write Policy") not in ("wt", "pt") or cache.get("Status") != "Running"
                 or cache.get("Core Devices") != "1" or cache.get("Inactive Core Devices") != "0"
                 or int(cache["Cache line size [KiB]"]) != LINE_KIB
                 or core.get("Status") != "Active"
@@ -134,12 +134,28 @@ class OpenCasCache(BlockCache):
                 or int(core["Core Size [4KiB Blocks]"]) * 4096 != lib["size"]):
             raise RuntimeError("The active Open CAS cache does not match the selected library.")
         return {
+            "mode": cache["Write Policy"],
             "used": int(cache["Occupancy [4KiB Blocks]"]) * 4096,
             "total": int(cache["Cache Size [4KiB Blocks]"]) * 4096,
             "dirty": int(cache["Dirty [4KiB Blocks]"]) * 4096,
             "hits": int(cache["Read hits [Requests]"]),
             "misses": int(cache["Read full misses [Requests]"]) + int(cache["Read partial misses [Requests]"]),
         }
+
+    def desired_mode(self):
+        return "wt" if self.m.config.get("enabled", True) else "pt"
+
+    def set_mode(self, lib, mode):
+        if mode not in ("wt", "pt"):
+            raise RuntimeError("Only writethrough and bypass modes are supported.")
+        stats = self.verify(lib)
+        if stats["mode"] == mode:
+            return
+        if stats["dirty"]:
+            raise RuntimeError("Cache has pending writes. Wait for writes to finish.")
+        self.cli("-Q", "-i", self.cid(lib), "-c", mode, timeout=120)
+        if self.verify(lib)["mode"] != mode:
+            raise RuntimeError("Open CAS did not change to the requested mode.")
 
     def identity(self, lib, origin, data):
         record = super().identity(lib, origin, data)
@@ -192,9 +208,10 @@ class OpenCasCache(BlockCache):
 
     def activate(self, lib):
         if self.active(lib):
+            self.set_mode(lib, self.desired_mode())
             return
         if self.table(lib):
-            self.verify(lib)
+            self.set_mode(lib, self.desired_mode())
             if lib["path"] in self.mounts():
                 raise RuntimeError("The library is mounted outside its existing cache.")
             self.run("mount", "-t", lib["fstype"], "-o", lib["options"], self.mapper(lib), lib["path"])
@@ -232,11 +249,11 @@ class OpenCasCache(BlockCache):
             if reused:
                 self.cli("-S", "-d", cache_alias, "--load", timeout=120)
             else:
-                self.cli("-S", "-i", self.cid(lib), "-d", cache_alias, "-c", "wt", "-x", str(LINE_KIB), timeout=120)
+                self.cli("-S", "-i", self.cid(lib), "-d", cache_alias, "-c", self.desired_mode(), "-x", str(LINE_KIB), timeout=120)
                 self.cli("-A", "-i", self.cid(lib), "-j", "1", "-d", origin_alias, timeout=60)
                 self.cli("-X", "-n", "seq-cutoff", "-i", self.cid(lib), "-p", "never")
             self.run("udevadm", "settle", "--timeout=15")
-            self.verify(lib)
+            self.set_mode(lib, self.desired_mode())
             Path(lib["path"]).mkdir(parents=True, exist_ok=True)
             self.run("mount", "-t", lib["fstype"], "-o", lib["options"], self.mapper(lib), lib["path"])
             if not self.active(lib):

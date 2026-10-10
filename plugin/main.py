@@ -4,9 +4,13 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import decky
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+from compatibility import compatibility, plugin_version
+from updates import check_update, download_update
 SERVICE = Path("/etc/systemd/system/deckycache.service")
 UDEV_RULE = Path("/etc/udev/rules.d/99-deckycache.rules")
 
@@ -21,8 +25,52 @@ def system_env():
 
 
 class Plugin:
+    def __init__(self):
+        self._candidate = None
+        self._update_lock = asyncio.Lock()
+
     async def _main(self):
-        await asyncio.to_thread(self._install_service)
+        try:
+            await asyncio.to_thread(self._install_service)
+        except Exception:
+            # Keep the panel and updater available even if storage cannot start.
+            decky.logger.exception("DeckyCache service could not start")
+
+    async def check_updates(self):
+        async with self._update_lock:
+            try:
+                self._candidate = None
+                self._candidate = await asyncio.to_thread(check_update, plugin_version())
+                return {"ok": True, "data": {"installed": plugin_version(),
+                        "compatibility": compatibility(), "candidate": self._candidate}}
+            except Exception as error:
+                return {"ok": False, "error": str(error)}
+
+    async def prepare_update(self):
+        async with self._update_lock:
+            try:
+                if not self._candidate:
+                    raise RuntimeError("Check for a compatible update first.")
+                candidate = dict(self._candidate)
+                data = await asyncio.to_thread(download_update, candidate)
+                folder = Path("/home/.deckycache/updates")
+                folder.mkdir(mode=0o700, parents=True, exist_ok=True)
+                target = folder / ("DeckyCache-" + candidate["version"] + "-" + candidate["sha256"][:16] + ".zip")
+                temporary = target.with_suffix(".tmp")
+                with temporary.open("wb") as stream:
+                    stream.write(data)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                os.chmod(temporary, 0o600)
+                temporary.replace(target)
+                # Verification happens before changing the running cache.
+                result = await self.request({"action": "prepare-update"})
+                if not result.get("ok"):
+                    raise RuntimeError(result["error"])
+                return {"ok": True, "data": {"artifact": "file://" + str(target),
+                        "version": candidate["version"], "sha256": candidate["sha256"]}}
+            except Exception as error:
+                return {"ok": False, "error": str(error)}
 
     def _install_service(self):
         unit = (
@@ -39,7 +87,10 @@ class Plugin:
         self._request({"action": "rules"})
         subprocess.run(["systemctl", "daemon-reload"], check=True, env=system_env())
         subprocess.run(["systemctl", "enable", "deckycache.service"], check=True, env=system_env())
-        subprocess.run(["systemctl", "start", "deckycache.service"], check=True, env=system_env())
+        config_path = Path("/home/.deckycache/config.json")
+        config = json.loads(config_path.read_text()) if config_path.exists() else {}
+        verb = "restart" if config.get("enabled") is False else "start"
+        subprocess.run(["systemctl", verb, "deckycache.service"], check=True, env=system_env())
 
     async def request(self, payload):
         try:

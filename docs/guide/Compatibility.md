@@ -27,9 +27,12 @@ Steam Deck hardware and other SteamOS kernels have not been qualified by the PC 
 
 ## After a SteamOS kernel update
 
-Install a plugin release containing modules for the new kernel.
-Without a matching bundle, the plugin reports that Open CAS is unavailable and uses the original HDD
-when no active cache device owns it. Do not force-load modules built for another kernel.
+The panel and **Check for updates** remain available without a matching module bundle.
+The updater offers a newer stable release only when it contains modules for exactly the running kernel.
+Follow [Updating the plugin](Installation.md#updating-the-plugin).
+
+Until a matching bundle is published and installed, caching is unavailable and the original HDD is used
+when no active cache device owns it. Games stay on that drive. Do not force-load modules built for another kernel.
 
 Changing a selected drive, losing a valid saved cache state or using the HDD independently may cause
 cache to rebuild. Game files remain on the original library drive.
@@ -37,6 +40,10 @@ cache to rebuild. Game files remain on the original library drive.
 ## What was checked
 
 On the tested PC, GRID and DiRT 3 launched and ran with Open CAS enabled.
+The master OFF/ON switch was checked on this PC: passthrough kept GRID's attributed cached blocks
+and the mounted library, then returned to writethrough. Decky's native installer reloaded the development
+build without restarting the PC, and its update check reached GitHub from Decky's embedded Python.
+
 Normal restart restored cached data. A GRID launch after restart produced read hits attributed
 to GRID, along with matching physical NVMe reads.
 

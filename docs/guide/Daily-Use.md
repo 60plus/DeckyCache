@@ -4,12 +4,26 @@
 
 ![Cache usage, library switch and cached game tiles](../images/cached-games.jpg)
 
+- **Enable DeckyCache:** turn caching on or temporarily bypass it.
+- **Check for updates:** find a compatible GitHub release and open Decky's installer.
 - **Cache drive:** selected SSD/NVMe, active partition count and occupied cache space.
 - **Library drives:** one on/off switch per eligible partition.
 - **Cached games:** Steam artwork, names and attributed cache sizes.
 - **Information buttons:** details without filling the main panel with text.
 
 You normally leave the selected library drives enabled and launch games as usual.
+
+## Temporarily turn caching off
+
+Close games and finish Steam downloads, then turn **Enable DeckyCache** off.
+Reads use the original HDD. Your library selection, cache drive and still-valid cached blocks are kept,
+including their entries in **Cached games**. Turn it back on to use those blocks again.
+
+Steam writes still pass through Open CAS and invalidate affected cached blocks, so later reads cannot
+reuse data changed by an update. OFF uses passthrough mode; it does not detach the SSD.
+Follow [Uninstalling](Uninstalling.md) before disconnecting or repurposing a cache drive.
+
+For plugin updates, follow [Updating the plugin](Installation.md#updating-the-plugin).
 
 ## Cached games and Small fragments
 
