@@ -2,7 +2,7 @@
 
 ## The main panel
 
-![Cache usage, library switch and cached game tiles](../images/cached-games.jpg)
+![Master switch, update button, cache usage and cached game tiles](../images/cached-games.jpg)
 
 - **Enable DeckyCache:** turn caching on or temporarily bypass it.
 - **Check for updates:** find a compatible GitHub release and open Decky's installer.

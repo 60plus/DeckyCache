@@ -38,7 +38,7 @@ blocks on the faster drive while the original games and Steam updates stay on th
 - **Clear cache:** remove cached copies without formatting the NVMe or deleting games.
 - **A compact controller-friendly panel:** short labels, section dividers and details behind information buttons.
 
-![DeckyCache showing cached games and library controls](docs/images/cached-games.jpg)
+![DeckyCache with the master switch, update button and cached games](docs/images/cached-games.jpg)
 
 ## Download and install
 
