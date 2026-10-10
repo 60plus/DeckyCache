@@ -8,7 +8,7 @@
 - **Check for updates:** find a compatible GitHub release and open Decky's installer.
 - **Cache drive:** selected SSD/NVMe, active partition count and occupied cache space.
 - **Library drives:** one on/off switch per eligible partition.
-- **Cached games:** Steam artwork, names and attributed cache sizes.
+- **Cached games:** Steam and non-Steam shortcut names, existing Steam artwork and attributed cache sizes.
 - **Information buttons:** details without filling the main panel with text.
 
 You normally leave the selected library drives enabled and launch games as usual.
@@ -30,6 +30,10 @@ For plugin updates, follow [Updating the plugin](Installation.md#updating-the-pl
 The main list shows installation folders with at least **16 MiB** of attributed cache data.
 Smaller nonzero entries are grouped under **Small fragments**. Expand it to see them.
 This is a display threshold; it does not delete or disable small cached entries.
+
+Steam games and non-Steam shortcuts pointing directly to games on a selected drive are detected automatically.
+Artwork already set in Steam is reused. No extra game list or artwork setup is required.
+A shortcut that launches an external launcher instead of the game executable may not appear.
 
 Select a game tile for details. Games that share one installation folder are grouped together.
 

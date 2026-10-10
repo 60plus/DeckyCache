@@ -19,8 +19,11 @@ This plugin does not rebuild or replace it; another kernel needs a matching modu
 [Full compatibility and update information](Compatibility.md)
 
 DeckyCache puts an SSD or NVMe cache in front of selected game-drive partitions.
-Original games stay on the HDD. The panel handles drive preparation, library selection
+Original games stay on the HDD. The panel handles drive preparation, library selection,
 clearing cached copies, a master switch and compatible GitHub updates.
+
+Non-Steam shortcuts on selected drives are detected automatically when they point directly to the game.
+The game list reuses names and custom artwork already configured in Steam.
 
 | Start here | What it covers |
 | --- | --- |

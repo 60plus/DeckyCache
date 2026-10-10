@@ -34,7 +34,7 @@ blocks on the faster drive while the original games and Steam updates stay on th
 - **Compatible updates:** check GitHub for a release matching the running kernel, then install through Decky with an automatic plugin reload. The built-in updater keeps compatible cache and library mounts connected.
 - **Persistent cache:** cached blocks survive a clean shutdown and restart.
 - **Original games stay on the HDD:** writethrough sends writes, including game updates, to the original drive.
-- **Cached games:** Steam artwork, names and attributed cache sizes, with tiny entries under **Small fragments**.
+- **Cached games:** Steam games and direct non-Steam shortcuts, with existing Steam artwork and attributed cache sizes. Tiny entries appear under **Small fragments**.
 - **Clear cache:** remove cached copies without formatting the NVMe or deleting games.
 - **A compact controller-friendly panel:** short labels, section dividers and details behind information buttons.
 

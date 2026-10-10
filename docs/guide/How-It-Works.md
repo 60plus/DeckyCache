@@ -47,8 +47,15 @@ and cache service so cache shutdown can finish before the display handover.
 
 ## Game attribution
 
-Steam manifests supply names and artwork. Open CAS directory classes track up to **32 distinct installation
-folders per cached volume**. Rules classify regular files and exclude directory metadata.
+Steam manifests and non-Steam shortcuts supply game names and installation paths.
+Shortcuts with a direct executable inside a selected library volume are detected automatically.
+External launchers that hide the game path are not attributed to a game. The panel uses custom artwork
+already set in Steam, including artwork supplied by other plugins, with standard Steam covers as a fallback.
+
+Open CAS directory classes track up to **32 distinct installation folders per cached volume**.
+Rules classify regular files and exclude directory metadata. Discovery alone does not add a tile:
+a folder must have attributed cached data. Existing unclassified blocks are not counted retroactively;
+later storage I/O can attribute them without clearing the cache.
 
 Direct I/O cannot be attributed by these directory rules and may reclassify cached lines.
 Unclassified data still uses ordinary cache. A class may retain blocks from replaced or deleted files

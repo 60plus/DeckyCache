@@ -15,6 +15,7 @@ from block_cache import BlockCache
 from opencas_cache import OpenCasCache
 from resident_games import resident_games, ScanChanged
 from compatibility import compatibility
+from steam_shortcuts import shortcut_games
 from service_runtime import CURRENT, owner_missing, cleanup_service
 LOADED_RUNTIME = Path(__file__).resolve().parent
 
@@ -524,6 +525,11 @@ class Manager:
                         continue
         return sorted({g["id"]: g for g in games}.values(), key=lambda g: g["name"].casefold())
 
+    def catalog(self, libraries):
+        volumes = [dict(lib, mapper=self.block.mapper(lib)) for lib in libraries
+                   if lib.get("enabled") and lib.get("active")]
+        return self.games(self.game_folders(libraries)) + shortcut_games(STEAM, volumes)
+
     def status(self, include_games=True):
         libs = self.libraries()
         usage = None
@@ -538,7 +544,7 @@ class Manager:
                 if isinstance(self.block, OpenCasCache):
                     games = self.block.cached_games(libs)
                 else:
-                    games = resident_games(self, libs, self.games(self.game_folders(libs)))
+                    games = resident_games(self, libs, self.catalog(libs))
                 games_state = "ready"
             except ScanChanged:
                 pass  # Do not present an old list during a cache migration/update.

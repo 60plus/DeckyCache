@@ -7,7 +7,7 @@ import { type ReactNode, useCallback, useEffect, useRef, useState } from "react"
 
 type Disk = { path: string; token: string; model: string; serial: string; size: number; reusable: boolean; blocked: string };
 type Library = { path: string; name: string; kind: string; enabled: boolean; active: boolean; error: string };
-type Game = { id: string; name: string; steam: boolean; cached_bytes?: number; path?: string; mapper?: string };
+type Game = { id: string; app_id?: number; name: string; steam: boolean; cached_bytes?: number; path?: string; mapper?: string };
 type GameGroup = Game & { key: string; titles: string[] };
 const SMALL_FRAGMENT_BYTES = 16 * 1024 ** 2;
 
@@ -21,7 +21,7 @@ function groupGames(games: Game[]): GameGroup[] {
       previous.cached_bytes = Math.max(previous.cached_bytes ?? 0, game.cached_bytes ?? 0);
       // A shared folder is counted once. Prefer its shortest title for the cover.
       if (game.name.length < previous.name.length) {
-        previous.name = game.name; previous.id = game.id; previous.steam = game.steam;
+        previous.name = game.name; previous.id = game.id; previous.app_id = game.app_id; previous.steam = game.steam;
       }
     } else groups.set(key, { ...game, key, titles: [game.name] });
   }
@@ -60,6 +60,38 @@ function Icon() {
     <circle cx="16" cy="7" r="1.3" />
     <path d="m9 10-4 .5 3-4 4-.5M13 14l-.5 2 4-3 .5-4M8 13l-2 2" />
   </svg>;
+}
+
+function artworkURLs(game: Game): string[] {
+  const urls: string[] = [];
+  // Use the same custom images as Steam, including artwork set by other plugins.
+  const store = window.appStore as unknown as {
+    GetAppOverviewByAppID?: (id: number) => unknown;
+    GetCustomLandcapeImageURLs?: (app: unknown) => string[];
+    GetCustomVerticalCapsuleURLs?: (app: unknown) => string[];
+  } | undefined;
+  try {
+    const overview = store?.GetAppOverviewByAppID?.(game.app_id ?? Number(game.id));
+    if (overview) {
+      for (const getter of [store?.GetCustomLandcapeImageURLs, store?.GetCustomVerticalCapsuleURLs]) {
+        try {
+          const custom = getter?.call(store, overview);
+          if (Array.isArray(custom)) urls.push(...custom.filter(url => typeof url === "string" && !!url));
+        } catch { /* Steam API differences must not hide the game card. */ }
+      }
+    }
+  } catch { /* The standard cover or plugin icon remains available. */ }
+  if (game.steam) urls.push("https://cdn.cloudflare.steamstatic.com/steam/apps/" + game.id + "/header.jpg");
+  return [...new Set(urls)];
+}
+
+function GameArtwork({ game }: { game: Game }) {
+  const [failed, setFailed] = useState<Record<string, boolean>>({});
+  const url = artworkURLs(game).find(candidate => !failed[candidate]);
+  return url ? <img key={url} src={url} alt="" loading="lazy"
+    style={{ display: "block", width: "100%", aspectRatio: "460/215", objectFit: "cover" }}
+    onError={() => setFailed(previous => ({ ...previous, [url]: true }))}
+  /> : <div style={{ padding: 15, textAlign: "center", color: "#70d4b0" }}><Icon /></div>;
 }
 
 function SectionDivider() {
@@ -187,11 +219,7 @@ function Panel() {
       {games.map(game => <DialogButton key={game.key} className="DeckyCacheGame"
         onClick={() => gameDetails(game)}
         style={{ padding: 0, minWidth: 0, width: "100%", overflow: "hidden", borderRadius: 8, textAlign: "left" }}>
-        {game.steam ? <img
-          src={"https://cdn.cloudflare.steamstatic.com/steam/apps/" + game.id + "/header.jpg"}
-          alt="" loading="lazy" style={{ display: "block", width: "100%", aspectRatio: "460/215", objectFit: "cover" }}
-          onError={e => { e.currentTarget.style.display = "none"; }}
-        /> : <div style={{ padding: 15, textAlign: "center", color: "#70d4b0" }}><Icon /></div>}
+        <GameArtwork game={game} />
         <div style={{ fontSize: 12, padding: 8, lineHeight: "1.35", whiteSpace: "normal" }}>
           <div>{game.name}</div>
           {game.cached_bytes !== undefined && <div style={{ color: "#aeb8c6", marginTop: 4 }}>
@@ -316,6 +344,7 @@ function Panel() {
       <PanelSection>
         <SectionHeading title={"Cached games" + (state.games_state === "ready" ? " · " + mainGames.length : "")} help={<>
           <p>The main list shows at least 16 MiB of tracked data per installation folder. Smaller entries are under Small fragments.</p>
+          <p>Steam games and non-Steam shortcuts with a direct game path on a selected drive are detected automatically. Custom artwork comes from Steam.</p>
           <p>These figures are partial. Unassigned data is included in the cache drive total. Background reads can add entries even if a game has not been launched.</p>
           <p>Games sharing a folder use one entry. Select a game for details. To remove all cached copies, use Clear cache above.</p>
         </>} />

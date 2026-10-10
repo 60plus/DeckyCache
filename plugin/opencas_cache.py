@@ -321,7 +321,7 @@ class OpenCasCache(BlockCache):
 
     def sync_classes(self, lib):
         """Track up to 32 distinct game folders; ordinary caching never depends on classification."""
-        catalog = self.m.games(self.m.game_folders([dict(lib, active=True)]))
+        catalog = self.m.catalog([dict(lib, active=True, enabled=True)])
         current = {}
         for game in catalog:
             path = Path(game["path"])

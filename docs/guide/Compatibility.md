@@ -58,6 +58,10 @@ A native plugin update between development builds preserved the mounted cache an
 GRID reads after installation produced cache hits. After the update, disposable-file writes, overwrites and
 atomic replacement matched direct reads from the original HDD as well as the cached filesystem.
 
+Non-Steam shortcuts were detected on the selected volume, and Blood's existing custom Steam artwork loaded.
+A controlled 1 MiB read of a Blood file was served entirely from NVMe and attributed to its game folder.
+That is a diagnostic storage read, not a gameplay benchmark.
+
 These observations do not establish performance gains for every game or compatibility with every PC.
 
 ## Automatic module compilation

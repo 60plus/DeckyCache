@@ -42,6 +42,17 @@ Steam or another process may have read its files in the background.
 Small entries are collapsed under **Small fragments**.
 See [Everyday use](Daily-Use.md) for the attribution limits.
 
+## A non-Steam game is missing from Cached games
+
+The Steam shortcut must point directly to an existing game executable on an enabled library partition.
+A shortcut to an external launcher may not expose the game folder and cannot be attributed automatically.
+You do not need to add the game or its artwork again.
+
+Check **Small fragments** for entries below 16 MiB. New tracking starts with subsequent storage I/O;
+existing unclassified blocks are not counted retroactively. A warm launch may read entirely from RAM.
+The current tracker supports 32 distinct installation folders per volume. These display limits do not
+disable ordinary caching of the other files on the selected partition.
+
 ## Cache is empty after a forced shutdown
 
 A valid clean-shutdown seal is required for reuse. If it is missing or no longer matches,
