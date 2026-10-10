@@ -4,6 +4,7 @@
 
 | Component | Supported or measured scope |
 | --- | --- |
+| **Supported SteamOS channel** | **Stable only**. Beta, Preview and Main are not supported. |
 | **Tested SteamOS** | **3.8.28**, build **20260922.1** |
 | Platform | SteamOS PC, x86-64 |
 | Library filesystem | Mounted ext4 data partitions on separate, non-system drives |

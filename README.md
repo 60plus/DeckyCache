@@ -6,6 +6,7 @@
 
 | Requirement | Current bundle |
 | --- | --- |
+| **Supported SteamOS channel** | **Stable only**. Beta, Preview and Main are not supported. |
 | **Tested SteamOS** | **3.8.28**, build **20260922.1**, on an NVIDIA x86-64 PC |
 | **Required kernel** | `6.18.50-valve2-1-neptune-618-gc7289a96b14d` |
 | **Library drives** | Separate **ext4 data partitions** |
