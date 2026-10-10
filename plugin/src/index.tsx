@@ -147,7 +147,7 @@ function Panel() {
         if (!result.ok) throw new Error(result.error);
         await installer.call("utilities/install_plugin", result.data.artifact, "DeckyCache",
           result.data.version, result.data.sha256, 2);
-        setUpdateMessage("Confirm the Decky installer. Cache stays off until you enable it.");
+        setUpdateMessage("Confirm the Decky installer. Cache and library drives stay connected.");
         setUpdate(null);
       }
     } catch (e) { setError(String(e)); }
@@ -244,7 +244,7 @@ function Panel() {
           Steam writes and updates invalidate only affected cached blocks, so old data is never reused.</p>
         <p>Updates come from the DeckyCache GitHub releases and must include a module for the running kernel.
           The ZIP and bundled modules are checked before opening the Decky installer.</p>
-        <p>Close games and finish Steam downloads before installing an update. Enable cache again after installation.</p>
+        <p>Close games and finish Steam downloads before installing an update. Cached data, library mounts and the master switch are preserved.</p>
         {(state?.compatibility ?? update?.compatibility) && <p>Kernel: {(state?.compatibility ?? update?.compatibility)?.kernel}</p>}
       </>} />
       {state && <PanelSectionRow><ToggleField label="Enable DeckyCache"

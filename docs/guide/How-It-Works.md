@@ -26,8 +26,10 @@ ON uses writethrough. OFF switches the same mounted cache device to passthrough:
 reads use the HDD, valid cached blocks remain on the SSD, and writes invalidate overlapping cached lines.
 Turning caching back on can reuse the unaffected data. This also keeps Steam updates coherent while OFF.
 
-Installing a plugin update is separate: libraries are detached to direct HDD access before Decky replaces
-the plugin, and remain off until explicitly enabled. Cache may rebuild after that direct access.
+The built-in updater keeps the same mounted Open CAS devices across a compatible plugin update.
+Storage code and its binaries have an independent runtime outside Decky's replaceable plugin directory.
+The worker adopts the new runtime between operations without stopping the systemd unit or unmounting a library.
+Writes continue through Open CAS throughout installation, including Steam updates.
 
 ## Persistent cache
 

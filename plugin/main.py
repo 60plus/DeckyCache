@@ -10,7 +10,8 @@ import decky
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from compatibility import compatibility, plugin_version
-from updates import check_update, download_update
+from updates import check_update, download_update, verify_live_update
+from service_runtime import CURRENT, install_runtime, arm_update, preserve_for_install, finish_update, cleanup_service
 SERVICE = Path("/etc/systemd/system/deckycache.service")
 UDEV_RULE = Path("/etc/udev/rules.d/99-deckycache.rules")
 
@@ -63,22 +64,24 @@ class Plugin:
                     os.fsync(stream.fileno())
                 os.chmod(temporary, 0o600)
                 temporary.replace(target)
-                # Verification happens before changing the running cache.
                 result = await self.request({"action": "prepare-update"})
                 if not result.get("ok"):
                     raise RuntimeError(result["error"])
+                verify_live_update(data, CURRENT, any(lib["active"] for lib in result["data"]["libraries"]))
+                arm_update(target, candidate["version"], candidate["sha256"], plugin_version())
                 return {"ok": True, "data": {"artifact": "file://" + str(target),
                         "version": candidate["version"], "sha256": candidate["sha256"]}}
             except Exception as error:
                 return {"ok": False, "error": str(error)}
 
     def _install_service(self):
+        install_runtime(HERE)
         unit = (
             "[Unit]\nDescription=DeckyCache block cache\nAfter=local-fs.target\nRequiresMountsFor=/home\nBefore=display-manager.service user@1000.service udisks2.service\n"
             "[Service]\nType=simple\n"
-            f'ExecStartPre=/usr/bin/python3 "{HERE / "cache_service.py"}" restore\n'
-            f'ExecStart=/usr/bin/python3 "{HERE / "cache_service.py"}" watch\n'
-            f'ExecStop=/usr/bin/python3 "{HERE / "cache_service.py"}" checkpoint\n'
+            f'ExecStartPre=/usr/bin/python3 "{CURRENT / "cache_service.py"}" restore\n'
+            f'ExecStart=/usr/bin/python3 "{CURRENT / "cache_service.py"}" watch\n'
+            f'ExecStop=/usr/bin/python3 "{CURRENT / "cache_service.py"}" checkpoint\n'
             "Restart=on-failure\nRestartSec=5\nTimeoutStartSec=180\nTimeoutStopSec=180\n"
             "[Install]\nWantedBy=multi-user.target\n"
         )
@@ -87,10 +90,8 @@ class Plugin:
         self._request({"action": "rules"})
         subprocess.run(["systemctl", "daemon-reload"], check=True, env=system_env())
         subprocess.run(["systemctl", "enable", "deckycache.service"], check=True, env=system_env())
-        config_path = Path("/home/.deckycache/config.json")
-        config = json.loads(config_path.read_text()) if config_path.exists() else {}
-        verb = "restart" if config.get("enabled") is False else "start"
-        subprocess.run(["systemctl", verb, "deckycache.service"], check=True, env=system_env())
+        subprocess.run(["systemctl", "start", "deckycache.service"], check=True, env=system_env())
+        finish_update(plugin_version())
 
     async def request(self, payload):
         try:
@@ -101,7 +102,7 @@ class Plugin:
 
     def _request(self, payload):
         p = subprocess.run(
-            ["nsenter", "-t", "1", "-m", "--", "/usr/bin/python3", str(HERE / "cache_service.py"), "request"],
+            ["nsenter", "-t", "1", "-m", "--", "/usr/bin/python3", str(CURRENT / "cache_service.py"), "request"],
             input=json.dumps(payload) + "\n", text=True, capture_output=True, timeout=240, env=system_env())
         if p.returncode:
             raise RuntimeError(p.stderr.strip() or "Could not read cache status.")
@@ -112,6 +113,10 @@ class Plugin:
         pass
 
     async def _uninstall(self):
+        if preserve_for_install(plugin_version()):
+            # Decky calls uninstall during replacement. The independent runtime,
+            # mounted libraries and cache must stay alive through that window.
+            return
         subprocess.run(["systemctl", "stop", "deckycache.service"], check=False, env=system_env())
         result = await self.request({"action": "stop"})
         if result.get("ok"):

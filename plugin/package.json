@@ -1,6 +1,6 @@
 {
   "name": "deckycache",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "description": "Puts an SSD or NVMe drive in front of a game library that lives on a slower disk.",
   "type": "module",
   "license": "BSD-3-Clause",
@@ -23,5 +23,8 @@
   "peerDependencies": {
     "react": "18.3.1",
     "react-dom": "18.3.1"
+  },
+  "deckycache": {
+    "cache_handoff": 1
   }
 }

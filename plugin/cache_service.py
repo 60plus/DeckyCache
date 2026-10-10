@@ -15,6 +15,8 @@ from block_cache import BlockCache
 from opencas_cache import OpenCasCache
 from resident_games import resident_games, ScanChanged
 from compatibility import compatibility
+from service_runtime import CURRENT, owner_missing, cleanup_service
+LOADED_RUNTIME = Path(__file__).resolve().parent
 
 STATE = Path("/home/.deckycache")
 RUN = Path("/run/deckycache")
@@ -413,14 +415,10 @@ class Manager:
         if any(busy(lib["path"]) for lib in targets.values()):
             raise RuntimeError("Close games and wait for Steam updates before installing an update.")
         for lib in targets.values():
-            if self.block.table(lib):
-                self.deactivate(lib)
-        # Keep raw HDD access while the installer replaces files, even if the
-        # user cancels. The next explicit enable clears this hold.
-        self.config.update(enabled=False, update_pending=True)
-        self.errors = {}
-        self.save()
-        self.reconcile()
+            if self.block.table(lib) and self.block.verify(lib)["dirty"]:
+                raise RuntimeError("Cache has pending writes. Wait for writes to finish.")
+        # Installation replaces only the Decky panel and bridge. The independent
+        # storage runtime keeps this mount and all writes on the same CAS device.
 
     def restore_originals(self):
         for lib in self.config["libraries"]:
@@ -670,8 +668,26 @@ if __name__ == "__main__":
             time.sleep(1)
         locked_action({"action": "reconcile"})
     elif args.mode == "watch":
+        print("Storage runtime: " + LOADED_RUNTIME.name, flush=True)
+        missing_since = None
         while True:
             try:
+                if CURRENT.is_dir() and CURRENT.resolve() != LOADED_RUNTIME:
+                    # Between operations, adopt new code without stopping the
+                    # systemd unit or touching any mounted cache device.
+                    os.execv(sys.executable, [sys.executable, str(CURRENT / "cache_service.py"), "watch"])
+                if owner_missing():
+                    missing_since = missing_since or time.monotonic()
+                    if time.monotonic() - missing_since >= 60:
+                        # A cancelled/failed update followed by a real uninstall
+                        # must not leave an orphan storage service indefinitely.
+                        (RUN / "stopping").touch()
+                        locked_action({"action": "stop"})
+                        cleanup_service(command)
+                        command("systemctl", "--no-block", "stop", "deckycache.service")
+                        break
+                else:
+                    missing_since = None
                 if not (RUN / "stopping").exists():
                     locked_action({"action": "reconcile"})
             except Exception as e:

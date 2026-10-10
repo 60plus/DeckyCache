@@ -31,7 +31,7 @@ blocks on the faster drive while the original games and Steam updates stay on th
 - **Choose an SSD or NVMe:** format a dedicated drive or reuse one prepared by DeckyCache.
 - **Choose library drives:** enable one or several supported game-drive partitions.
 - **Master switch:** temporarily bypass cache while keeping your drive selections and valid cached blocks.
-- **Compatible updates:** check GitHub for a release matching the running kernel, then install through Decky with an automatic plugin reload.
+- **Compatible updates:** check GitHub for a release matching the running kernel, then install through Decky with an automatic plugin reload. The built-in updater keeps compatible cache and library mounts connected.
 - **Persistent cache:** cached blocks survive a clean shutdown and restart.
 - **Original games stay on the HDD:** writethrough sends writes, including game updates, to the original drive.
 - **Cached games:** Steam artwork, names and attributed cache sizes, with tiny entries under **Small fragments**.

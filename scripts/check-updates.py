@@ -192,5 +192,67 @@ class BridgeFailure(unittest.IsolatedAsyncioTestCase):
         main.decky.logger.exception.assert_called_once()
 
 
+
+class LiveUpdate(unittest.TestCase):
+    def test_preparation_preserves_mounts_data_and_switch(self):
+        for enabled in (True, False):
+            m = MasterSwitch().manager()
+            m.config["enabled"] = enabled
+            m.block.table.return_value = {"type": "cache"}
+            m.block.verify.return_value = {"dirty": 0}
+            before = json.loads(json.dumps(m.config))
+            with patch.object(service, "busy", return_value=False):
+                m.prepare_update()
+            self.assertEqual(m.config, before)
+            m.deactivate.assert_not_called()
+            m.block.deactivate.assert_not_called()
+            m.save.assert_not_called()
+
+    def test_busy_or_dirty_cache_is_not_prepared(self):
+        m = MasterSwitch().manager()
+        m.block.table.return_value = {"type": "cache"}
+        m.block.verify.return_value = {"dirty": 4096}
+        for running in (True, False):
+            with patch.object(service, "busy", return_value=running):
+                with self.assertRaises(RuntimeError):
+                    m.prepare_update()
+        m.deactivate.assert_not_called()
+        m.save.assert_not_called()
+
+    def test_incompatible_receiver_or_engine_is_refused_before_handoff(self):
+        kernel = "test-kernel"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = {"kernel": kernel, "version": "same-engine", "sha256": {"cas_cache.ko": "abc"}}
+            path = root / "bin/opencas" / kernel / "manifest.json"
+            path.parent.mkdir(parents=True)
+            path.write_text(json.dumps(manifest))
+            def archive(protocol=1, value=manifest):
+                stream = io.BytesIO()
+                with zipfile.ZipFile(stream, "w") as z:
+                    z.writestr("DeckyCache/package.json", json.dumps({"deckycache": {"cache_handoff": protocol}}))
+                    z.writestr("DeckyCache/bin/opencas/" + kernel + "/manifest.json", json.dumps(value))
+                return stream.getvalue()
+            with patch.object(updates.platform, "release", return_value=kernel):
+                updates.verify_live_update(archive(), root, True)
+                for data in (archive(0), archive(value=dict(manifest, version="changed"))):
+                    with self.assertRaises(RuntimeError):
+                        updates.verify_live_update(data, root, True)
+                # A cold, unsupported kernel has no mounted cache to preserve.
+                updates.verify_live_update(archive(0), root, False)
+
+    def test_native_replacement_does_not_stop_storage_service(self):
+        spec = importlib.util.spec_from_file_location("live_bridge_check", ROOT / "plugin/main.py")
+        bridge = importlib.util.module_from_spec(spec)
+        with patch.dict(sys.modules, {"decky": types.SimpleNamespace(logger=Mock())}):
+            spec.loader.exec_module(bridge)
+        import asyncio
+        plugin = bridge.Plugin()
+        with patch.object(bridge, "preserve_for_install", return_value=True), \
+                patch.object(bridge, "plugin_version", return_value="0.4.6-dev"), \
+                patch.object(bridge.subprocess, "run") as run:
+            asyncio.run(plugin._uninstall())
+        run.assert_not_called()
+
 if __name__ == "__main__":
     unittest.main()

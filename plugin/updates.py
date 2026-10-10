@@ -157,3 +157,17 @@ def download_update(candidate):
     data = read_url(candidate["url"], MAX_ZIP)
     verify_archive(data, candidate)
     return data
+
+def verify_live_update(data, runtime, active):
+    """An active cache can stay mounted only with a compatible receiver and engine."""
+    if not active:
+        return
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        package = json.loads(archive.read("DeckyCache/package.json"))
+        if package.get("deckycache", {}).get("cache_handoff") != 1:
+            raise RuntimeError("This update cannot preserve the active cache. It has not been installed.")
+        name = "bin/opencas/" + platform.release() + "/manifest.json"
+        previous = json.loads((Path(runtime) / name).read_text())
+        incoming = json.loads(archive.read("DeckyCache/" + name))
+        if any(previous.get(key) != incoming.get(key) for key in ("kernel", "version", "sha256")):
+            raise RuntimeError("This update changes the cache engine. A live update cannot preserve the active cache.")

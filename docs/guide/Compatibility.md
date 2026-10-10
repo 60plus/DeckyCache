@@ -34,6 +34,9 @@ Follow [Updating the plugin](Installation.md#updating-the-plugin).
 Until a matching bundle is published and installed, caching is unavailable and the original HDD is used
 when no active cache device owns it. Games stay on that drive. Do not force-load modules built for another kernel.
 
+Compatible plugin updates through the built-in updater preserve active cache and library mounts.
+The previous detaching updater and manual ZIP replacement do not provide this handoff.
+
 Changing a selected drive, losing a valid saved cache state or using the HDD independently may cause
 cache to rebuild. Game files remain on the original library drive.
 
@@ -50,6 +53,10 @@ to GRID, along with matching physical NVMe reads.
 Disposable-image checks covered cached reads, stop/load persistence, writes, atomic replacement,
 clear/refill and visibility of updated files on the original filesystem after detaching.
 These checks do not replace an end-to-end Steam download/update test, which remains unverified for this release.
+
+A native plugin update between development builds preserved the mounted cache and all 31 installed-game entries.
+GRID reads after installation produced cache hits. After the update, disposable-file writes, overwrites and
+atomic replacement matched direct reads from the original HDD as well as the cached filesystem.
 
 These observations do not establish performance gains for every game or compatibility with every PC.
 

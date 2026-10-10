@@ -72,15 +72,19 @@ Continue with [First setup](Setup.md) to select the cache drive and library part
 3. If a compatible release is available, select **Update to** the offered version.
 4. Confirm Decky's normal installation prompt. Decky replaces and reloads the plugin automatically;
    no PC restart is needed for the plugin update.
-5. Reopen DeckyCache and turn **Enable DeckyCache** on when ready.
+5. Reopen DeckyCache. Your master switch, cached data and library connections are kept.
 
 The updater selects stable releases from this project's GitHub repository containing a bundle for
 exactly the running kernel. It verifies the ZIP and bundled modules before preparing storage for installation.
 It does not compile modules or choose an incompatible release just because it is newer.
 
-Update preparation returns libraries to direct HDD access. Drive selections are kept, but cache stays off
-after installation or a cancelled installer. Cached data may refill when you enable it again.
-The regular master OFF/ON switch preserves valid cached blocks; installation is a separate operation.
+The built-in updater keeps the independent storage service and library mounts running while Decky
+replaces the plugin. A compatible update preserves cached blocks and Steam's installed-game list.
+Cancelling the installer leaves caching unchanged. Packages that change the active cache engine or
+cannot accept this handoff are refused before storage is changed.
+
+This preservation requires the new updater on both sides. Updating from an older version that detaches
+cache, or replacing the ZIP manually through Decky, can still rebuild cache.
 
 If your installed version has no update button, install a newer plugin ZIP once through the Developer screen.
 Manual ZIP installation remains available. Check its supported kernel before installing.
