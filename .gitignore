@@ -1,0 +1,7 @@
+/target
+/plugin/node_modules
+/plugin/dist
+/plugin/bin
+/build
+__pycache__/
+

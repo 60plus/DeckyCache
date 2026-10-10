@@ -1,0 +1,9 @@
+# Everything in this repository is text with Unix line endings. The target is
+# Linux, and a shell script or a service unit that picks up carriage returns
+# on a Windows checkout stops working with an error that names the wrong
+# thing: the shell reports a bad interpreter rather than a stray byte.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.zip binary

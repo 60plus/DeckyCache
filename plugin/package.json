@@ -1,0 +1,27 @@
+{
+  "name": "deckycache",
+  "version": "0.4.4",
+  "description": "Puts an SSD or NVMe drive in front of a game library that lives on a slower disk.",
+  "type": "module",
+  "license": "BSD-3-Clause",
+  "scripts": {
+    "build": "rollup -c",
+    "watch": "rollup -c -w",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@decky/api": "^1.1.2",
+    "@decky/ui": "^4.9.0"
+  },
+  "devDependencies": {
+    "@decky/rollup": "^1.0.1",
+    "@types/react": "18.3.3",
+    "@types/react-dom": "18.3.0",
+    "shx": "^0.3.4",
+    "typescript": "^5.5.4"
+  },
+  "peerDependencies": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  }
+}

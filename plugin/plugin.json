@@ -1,0 +1,17 @@
+{
+  "name": "DeckyCache",
+  "author": "DeckyCache contributors",
+  "flags": [
+    "root"
+  ],
+  "api_version": 1,
+  "publish": {
+    "description": "Native SSD/NVMe block cache for game drives. Writethrough keeps originals and Steam updates on the library drive.",
+    "tags": [
+      "storage",
+      "performance",
+      "cache",
+      "system"
+    ]
+  }
+}

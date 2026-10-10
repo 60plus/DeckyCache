@@ -1,0 +1,19 @@
+name: Check plugin
+on: [push, pull_request]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: plugin/package-lock.json
+      - run: npm ci
+        working-directory: plugin
+      - run: npm run typecheck && npm run build
+        working-directory: plugin
+      - run: python3 -m py_compile plugin/*.py scripts/*.py
+      - run: python3 scripts/check-opencas.py
+      - run: python3 scripts/check-service-lifecycle.py
