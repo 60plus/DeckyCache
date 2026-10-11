@@ -12,7 +12,7 @@ It must be an ext4 data partition on a separate, non-system drive and already mo
 `/run/media/`, `/media/` or `/mnt/`. Mount it in Desktop Mode and check that Steam sees its existing
 library, then reopen DeckyCache.
 
-The current version selects partitions, not folders.
+Enable its partition under **Library drives** first. You can then choose folders on it under **Cache scope**.
 
 ## Format or selection is refused
 
@@ -30,7 +30,8 @@ Do not force-load an older module or format the SSD just to clear this message.
 
 The first read of uncached data normally comes from HDD.
 Repeated reads may be served from RAM before reaching Open CAS.
-Writes can also populate cache. Occupancy alone does not prove a game read came from NVMe.
+Writes do not allocate new cache blocks in this release. Background reads inside the selected scope
+can populate cache. Occupancy alone does not prove a game read came from NVMe.
 
 For a controlled check, close the game, restart normally, record Open CAS counters before launch,
 then load the same content and compare read hits and physical NVMe reads.
@@ -50,8 +51,28 @@ You do not need to add the game or its artwork again.
 
 Check **Small fragments** for entries below 16 MiB. New tracking starts with subsequent storage I/O;
 existing unclassified blocks are not counted retroactively. A warm launch may read entirely from RAM.
-The current tracker supports 32 distinct installation folders per volume. These display limits do not
-disable ordinary caching of the other files on the selected partition.
+The engine has 32 class slots per volume, shared by tracked game folders and selected folder roots.
+In whole-drive mode, files without a game slot can still use cache and appear under Other cached data.
+
+## Other cached data is large
+
+The final tile includes blocks outside the current game list, such as unclassified data, selected-folder
+fallback classes and data retained from older versions. It does not include listed game entries,
+including Small fragments. Updating or changing scope does not silently erase earlier cached data.
+
+Use **Clear cache** to discard all cached copies without formatting the SSD or deleting games.
+With write-around enabled, copying and installation writes no longer allocate cache lines.
+Reads for copying, unpacking or verification inside the selected scope can still fill cache.
+
+## A selected folder is refused or does not fill cache
+
+Folders must be on an enabled library partition. The 32 Open CAS class slots per volume are shared
+by tracked games and selected folder roots. If no slot is free for a new folder, the selection is refused
+without broadening caching to the whole drive.
+
+Reads already served from RAM do not reach Open CAS. Some direct or asynchronous reads cannot be
+associated with directory rules and bypass cache in folder mode. Use **Entire selected drives** if
+broader admission is more useful than folder filtering.
 
 ## Cache is empty after a forced shutdown
 

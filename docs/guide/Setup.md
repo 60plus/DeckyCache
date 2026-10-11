@@ -31,8 +31,8 @@ Under **Library drives**, enable each partition you want to cache.
 Multiple partitions can share the selected SSD/NVMe.
 
 The current selector works with mounted ext4 data partitions on separate, non-system drives.
-Each switch applies to the **whole partition**. If Steam, DRM-free games and ROMs are in different
-folders on that partition, all are eligible for cache. Other files on that partition are eligible too.
+Each switch connects the **whole partition** through Open CAS. The separate **Cache scope** control
+lets you decide which reads may populate cache.
 
 The original HDD filesystem and library path stay in place. There is no need to move or reinstall games.
 Wait for **Active** before starting a game.
@@ -40,9 +40,25 @@ Wait for **Active** before starting a game.
 Changing the selected partitions redistributes cache space and rebuilds cached contents.
 The games on the HDD remain intact.
 
+## Choose cache scope
+
+- **Entire selected drives:** reads anywhere on enabled library partitions may populate cache.
+- **Selected folders:** use **Add Steam library** or **Add folder...** to choose folders on enabled drives.
+  You can select several folders across several enabled drives. Select a folder row to remove it from the selection.
+
+![Selected Steam and DRM-free folders](../images/cache-folders.png)
+
+Folder changes apply without remounting libraries or clearing existing cached data.
+With no selected folders, folder mode admits no new data. Switch back to **Entire selected drives**
+to include all eligible reads again.
+
+Both modes send writes to the HDD without allocating new cache blocks. Reading selected files for
+copying or verification can still fill cache. Folder mode does not depend on whether a game is running.
+See [How it works](How-It-Works.md) for directory-rule limits.
+
 ## Play
 
-Cache fills as data is accessed. The first read may come from the HDD; later reads can use NVMe.
+Cache fills as eligible data is read. The first read may come from the HDD; later reads can use NVMe.
 The plugin does not copy entire games in advance.
 
 The usage bar shows actual occupied cache blocks, not the preallocated backing-file size.

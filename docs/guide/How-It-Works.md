@@ -12,8 +12,8 @@ ext4 library on the Open CAS device
     └─ cache miss → original HDD → eligible data cached on SSD / NVMe
 ```
 
-Open CAS caches **64 KiB blocks**, not whole games. Writethrough sends writes to the original HDD
-and maintains cache coherence. Steam keeps using the same library path.
+Open CAS caches **64 KiB blocks**, not whole games. Write-around sends writes to the original HDD without allocating new cache lines.
+Overlapping cached data is updated or invalidated, so subsequent reads see the current game files. Steam keeps using the same library path.
 
 Each selected partition gets a preallocated cache backing image on the SSD filesystem.
 It is attached using direct I/O, so the backing image does not create a second Linux page-cache layer.
@@ -22,7 +22,7 @@ The panel reports Open CAS occupancy, not the allocated image size.
 
 ## Master switch
 
-ON uses writethrough. OFF switches the same mounted cache device to passthrough:
+ON uses write-around with the selected drive or folder scope. OFF switches the same mounted cache device to passthrough:
 reads use the HDD, valid cached blocks remain on the SSD, and writes invalidate overlapping cached lines.
 Turning caching back on can reuse the unaffected data. This also keeps Steam updates coherent while OFF.
 
@@ -52,17 +52,31 @@ Shortcuts with a direct executable inside a selected library volume are detected
 External launchers that hide the game path are not attributed to a game. The panel uses custom artwork
 already set in Steam, including artwork supplied by other plugins, with standard Steam covers as a fallback.
 
-Open CAS directory classes track up to **32 distinct installation folders per cached volume**.
-Rules classify regular files and exclude directory metadata. Discovery alone does not add a tile:
-a folder must have attributed cached data. Existing unclassified blocks are not counted retroactively;
-later storage I/O can attribute them without clearing the cache.
+## Cache scope
 
-Direct I/O cannot be attributed by these directory rules and may reclassify cached lines.
-Unclassified data still uses ordinary cache. A class may retain blocks from replaced or deleted files
-until eviction or reuse. Consequently, the game list is partial and is not an exact live file-residency map.
+**Entire selected drives** admits reads anywhere on the enabled partitions.
+**Selected folders** admits only reads associated with the chosen folders. Add a Steam library
+with its shortcut button or use **Add folder...** for DRM-free games and other libraries.
+Folders must be on an enabled library drive. Selection changes apply online without remounting
+libraries or clearing existing cache.
+
+Both modes use write-around: writes from copying, installation and Steam updates do not allocate
+new cache lines. Data is written to the HDD; cached overlaps are updated or invalidated.
+Reading files for copying, unpacking or verification can populate cache if the source is inside
+the chosen scope. Folder mode is an I/O location filter, not a game-running detector.
+
+Open CAS directory rules cannot identify some direct or asynchronous reads. In folder mode those
+requests bypass cache rather than admitting data from elsewhere on the partition.
+The engine has 32 tracking slots per volume, shared by game paths and selected folder roots.
+If no slot remains for a new folder, the selection is refused without widening the scope.
+Game classes keep their old IDs and occupancy across updates.
 
 The main list uses a 16 MiB threshold. Smaller entries remain under **Small fragments**.
-Shared installation folders appear once.
+Shared installation folders appear once. **Other cached data** is always the last tile and includes
+unclassified occupancy and classes whose former game paths are no longer in the catalogue.
+It excludes all listed games, including collapsed small fragments. Its total and the game cards come
+from the same per-class snapshot. Cached data saved by earlier versions is retained; this update does
+not silently clear it. These counters are attribution, not a precise inventory of current game files.
 
 ## Why there is no pinning or per-game clear
 

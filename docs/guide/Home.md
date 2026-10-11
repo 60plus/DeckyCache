@@ -20,7 +20,7 @@ This plugin does not rebuild or replace it; another kernel needs a matching modu
 
 DeckyCache puts an SSD or NVMe cache in front of selected game-drive partitions.
 Original games stay on the HDD. The panel handles drive preparation, library selection,
-clearing cached copies, a master switch and compatible GitHub updates.
+drive or folder cache scope, clearing cached copies, a master switch and compatible GitHub updates.
 
 Non-Steam shortcuts on selected drives are detected automatically when they point directly to the game.
 The game list reuses names and custom artwork already configured in Steam.
@@ -28,11 +28,12 @@ The game list reuses names and custom artwork already configured in Steam.
 | Start here | What it covers |
 | --- | --- |
 | [Installation](Installation.md) | Install the ZIP through Decky Developer settings, then use the built-in updater. |
-| [First setup](Setup.md) | Select, format or reuse the cache drive; enable library drives. |
-| [Everyday use](Daily-Use.md) | Cached games, small fragments, clearing cache and Steam updates. |
+| [First setup](Setup.md) | Select, format or reuse the cache drive; enable library drives and choose cache folders. |
+| [Everyday use](Daily-Use.md) | Cache scope, game tiles, Other cached data, clearing cache and Steam updates. |
 | [Compatibility](Compatibility.md) | Supported filesystem, exact kernel bundle and update requirements. |
 | [Troubleshooting](Troubleshooting.md) | Missing drives, game list entries and cache readings. |
 | [Uninstalling](Uninstalling.md) | Return to direct HDD access and remove the plugin. |
 | [How it works](How-It-Works.md) | Open CAS, persistent blocks and the limits of game attribution. |
 
-**Current build:** Open CAS writethrough caching. No pinning, folder filters or full-game copies.
+**Current build:** Open CAS write-around read caching with drive or folder selection.
+Writes stay on the original HDD without allocating new cache blocks. No pinning or full-game preload.

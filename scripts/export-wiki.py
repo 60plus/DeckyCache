@@ -14,7 +14,7 @@ if not (destination / ".git").exists():
 source = ROOT / "docs/guide"
 for page in source.glob("*.md"):
     text = page.read_text(encoding="utf-8")
-    text = re.sub(r"\]\(([A-Za-z0-9-]+)\.md\)", r"](\1)", text)
+    text = re.sub(r"\]\(([A-Za-z0-9-]+)\.md(#[^)]*)?\)", r"](\1\2)", text)
     text = text.replace("../../images/", "images/").replace("../images/", "images/")
     (destination / page.name).write_text(text, encoding="utf-8", newline="\n")
 images = destination / "images"

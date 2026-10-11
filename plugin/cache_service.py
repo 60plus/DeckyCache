@@ -1,4 +1,4 @@
-"""Whole-partition writethrough cache; the original library remains on the HDD."""
+"""Whole-partition read cache with optional folder admission; the original library remains on the HDD."""
 from __future__ import annotations
 import argparse
 import fcntl
@@ -388,13 +388,13 @@ class Manager:
         targets.update(self.runtime)
         if any(busy(lib["path"]) for lib in targets.values()):
             raise RuntimeError("Close games and wait for Steam updates before changing DeckyCache.")
-        old_mode = "wt" if self.config.get("enabled", True) else "pt"
+        old_mode = "wa" if self.config.get("enabled", True) else "pt"
         changed = []
         try:
             for lib in targets.values():
                 if self.block.table(lib):
                     if isinstance(self.block, OpenCasCache):
-                        self.block.set_mode(lib, "wt" if enabled else "pt")
+                        self.block.set_mode(lib, "wa" if enabled else "pt")
                         changed.append(lib)
                     elif not enabled:
                         self.deactivate(lib)
@@ -462,8 +462,10 @@ class Manager:
                 if isinstance(self.block, OpenCasCache):
                     try:
                         self.block.sync_classes(lib)
-                    except Exception as tracking_error:
-                        print("Game classification: " + str(tracking_error), file=sys.stderr, flush=True)
+                        self.block.set_mode(lib, self.block.desired_mode())
+                    except Exception:
+                        self.block.set_mode(lib, "pt")
+                        raise
             except Exception as e:
                 self.errors[lib["id"]] = str(e)
                 # Missing module/cache at boot must not make the HDD library disappear.
@@ -530,6 +532,60 @@ class Manager:
                    if lib.get("enabled") and lib.get("active")]
         return self.games(self.game_folders(libraries)) + shortcut_games(STEAM, volumes)
 
+    def set_scope(self, request):
+        if not isinstance(self.block, OpenCasCache):
+            raise RuntimeError("Folder selection requires Open CAS.")
+        previous = json.loads(json.dumps(self.config))
+        if request["action"] == "scope":
+            mode = request.get("scope")
+            if mode not in ("drives", "folders"):
+                raise RuntimeError("Choose Entire selected drives or Selected folders.")
+            self.config["cache_scope"] = mode
+        else:
+            raw = request.get("path", "")
+            if not isinstance(raw, str) or not Path(raw).is_absolute():
+                raise RuntimeError("Choose an absolute folder path.")
+            folders = list(self.config.get("cache_folders", []))
+            if request.get("enabled") is False:
+                folders = [row for row in folders if row["path"] != raw]
+            else:
+                path = Path(raw).resolve(strict=True)
+                lib = next((lib for lib in self.config["libraries"]
+                            if path.is_relative_to(Path(lib["path"]).resolve()) and self.active(lib)), None)
+                if not path.is_dir() or not lib or path.stat().st_dev != os.stat(self.block.mapper(lib)).st_rdev:
+                    raise RuntimeError("Choose a folder on an enabled library drive.")
+                from cache_scope import directory_rule
+                directory_rule([str(path)], done=False)
+                item = {"path": str(path), "uuid": lib["uuid"]}
+                if item not in folders:
+                    folders.append(item)
+            self.config["cache_folders"] = folders
+        targets = [lib for lib in self.config["libraries"] if self.active(lib)]
+        try:
+            for lib in targets:
+                self.block.class_plan(lib)  # Validate every volume before applying.
+            for lib in targets:
+                self.block.sync_classes(lib)
+            save_json(STATE / "config.json", self.config)
+        except Exception:
+            self.config = previous
+            for lib in targets:
+                try:
+                    self.block.sync_classes(lib)
+                except Exception:
+                    self.block.set_mode(lib, "pt")
+            raise
+
+    def folder_choices(self, libraries):
+        selected = self.config.get("cache_folders", [])
+        candidates = []
+        for folder in self.game_folders(libraries):
+            path = Path(folder["path"]) / "common"
+            if path.is_dir():
+                candidates.append({"path": str(path), "name": "Steam library"})
+        return {"mode": self.config.get("cache_scope", "drives"), "folders": selected,
+                "suggestions": candidates}
+
     def status(self, include_games=True):
         libs = self.libraries()
         usage = None
@@ -538,11 +594,13 @@ class Manager:
             if stats:
                 usage = {"total": sum(x["total"] for x in stats), "used": sum(x["used"] for x in stats),
                          "hits": sum(x["hits"] for x in stats), "misses": sum(x["misses"] for x in stats)}
-        games, games_state = [], "updating"
+        games, games_state, other_cached = [], "updating", None
         if include_games:
             try:
                 if isinstance(self.block, OpenCasCache):
-                    games = self.block.cached_games(libs)
+                    games, other_cached, measured_total = self.block.cached_usage(libs)
+                    if usage is not None:
+                        usage["used"] = measured_total
                 else:
                     games = resident_games(self, libs, self.catalog(libs))
                 games_state = "ready"
@@ -554,7 +612,8 @@ class Manager:
         return {"enabled": self.config.get("enabled", True), "compatibility": compatibility(),
                 "engine": self.config.get("engine", "dm-cache"),
                 "cache": self.config["cache"], "devices": self.devices(), "usage": usage,
-                "libraries": libs, "games": games, "games_state": games_state,
+                "libraries": libs, "games": games, "games_state": games_state, "other_cached_bytes": other_cached,
+                "scope": self.folder_choices(libs),
                 "error": self.errors.get("cache", "")}
 
     def migrate_opencas(self):
@@ -614,6 +673,8 @@ class Manager:
             self.prepare_update()
         elif action == "enabled":
             self.set_enabled(request.get("enabled"))
+        elif action in ("scope", "folder"):
+            self.set_scope(request)
         elif action == "clear-cache":
             self.clear_cache(request)
         elif action == "library":
@@ -628,7 +689,7 @@ class Manager:
             self.sync_rules()
         elif action != "status":
             raise RuntimeError("Unknown operation.")
-        return self.status(include_games=action in ("status", "clear-cache"))
+        return self.status(include_games=action in ("status", "clear-cache", "scope", "folder"))
 
 
 def locked_action(request):
@@ -638,7 +699,7 @@ def locked_action(request):
         fcntl.flock(lock, fcntl.LOCK_EX)
         # A request may have waited behind checkpoint after watch checked the
         # marker. Recheck under the lock so it cannot remount a stopped cache.
-        if request.get("action") in ("format", "reuse", "library", "reconcile", "migrate-opencas", "clear-cache", "enabled", "prepare-update") and (RUN / "stopping").exists():
+        if request.get("action") in ("format", "reuse", "library", "reconcile", "migrate-opencas", "clear-cache", "enabled", "prepare-update", "scope", "folder") and (RUN / "stopping").exists():
             raise RuntimeError("Cache is stopping. Start the cache service before changing drives.")
         return Manager().action(request)
 

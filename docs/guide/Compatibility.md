@@ -9,7 +9,7 @@
 | Platform | SteamOS PC, x86-64 |
 | Library filesystem | Mounted ext4 data partitions on separate, non-system drives |
 | Cache drive | A dedicated SSD/NVMe identified by the plugin |
-| Engine | Open CAS 26.09.0.1102.release, writethrough, 64 KiB cache lines |
+| Engine | Open CAS 26.09.0.1102.release, write-around, 64 KiB cache lines |
 | **Required kernel (exact match)** | `6.18.50-valve2-1-neptune-618-gc7289a96b14d` |
 | Hardware test environment | SteamOS 3.8.28, Decky Loader 3.2.10, NVIDIA PC |
 
@@ -44,7 +44,7 @@ cache to rebuild. Game files remain on the original library drive.
 
 On the tested PC, GRID and DiRT 3 launched and ran with Open CAS enabled.
 The master OFF/ON switch was checked on this PC: passthrough kept GRID's attributed cached blocks
-and the mounted library, then returned to writethrough. Decky's native installer reloaded the development
+and the mounted library. That earlier switch check used writethrough; the current release uses write-around. Decky's native installer reloaded the development
 build without restarting the PC, and its update check reached GitHub from Decky's embedded Python.
 
 Normal restart restored cached data. A GRID launch after restart produced read hits attributed
@@ -61,6 +61,18 @@ atomic replacement matched direct reads from the original HDD as well as the cac
 Non-Steam shortcuts were detected on the selected volume, and Blood's existing custom Steam artwork loaded.
 A controlled 1 MiB read of a Blood file was served entirely from NVMe and attributed to its game folder.
 That is a diagnostic storage read, not a gameplay benchmark.
+
+For 0.4.8, a native update to the development build kept occupied cache bytes, the active library mount
+and all 31 Steam game entries. Folder selection applied without remounting or clearing cache.
+An isolated ext4 check confirmed that writes and excluded reads do not allocate new cache lines,
+while selected-folder reads populate cache and produce hits. Overwrites and atomic replacements
+returned current content. This is not a real Steam download/update test.
+
+After a normal PC restart, a 90-second MOUSE loading/gameplay observation measured **1.05 GiB from
+cache and 69 MiB from HDD**, approximately **94% of the measured storage-read bytes from cache**.
+Physical NVMe counters independently matched the cache reads. Cache errors remained zero.
+The cache was retained across restart. These are storage I/O measurements, not a loading-time benchmark
+or a count of reads served from RAM.
 
 These observations do not establish performance gains for every game or compatibility with every PC.
 

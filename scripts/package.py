@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 version = json.loads((ROOT / "plugin/package.json").read_text())["version"]
 output = ROOT / "build" / f"DeckyCache-{version}.zip"
 output.parent.mkdir(exist_ok=True)
-files = ["plugin.json", "package.json", "main.py", "cache_service.py", "block_cache.py", "resident_games.py", "opencas_cache.py", "compatibility.py", "updates.py", "service_runtime.py", "steam_shortcuts.py", "dist/index.js"]
+files = ["plugin.json", "package.json", "main.py", "cache_service.py", "block_cache.py", "resident_games.py", "opencas_cache.py", "compatibility.py", "updates.py", "service_runtime.py", "steam_shortcuts.py", "cache_scope.py", "dist/index.js"]
 bundles = list((ROOT / "plugin/bin/opencas").glob("*/manifest.json"))
 if not bundles or not (ROOT / "plugin/bin/opencas/casadm").is_file():
     raise RuntimeError("Prepare the exact-kernel Open CAS bundle before packaging.")

@@ -13,7 +13,7 @@ OWNER = RUNTIME / "owner.json"
 INTENT = STATE / "update-handoff.json"
 SERVICE = Path("/etc/systemd/system/deckycache.service")
 FILES = ("cache_service.py", "block_cache.py", "opencas_cache.py",
-         "resident_games.py", "compatibility.py", "service_runtime.py", "steam_shortcuts.py", "package.json")
+         "resident_games.py", "compatibility.py", "service_runtime.py", "steam_shortcuts.py", "cache_scope.py", "package.json")
 
 
 def atomic_json(path, value):

@@ -19,3 +19,4 @@ jobs:
       - run: python3 scripts/check-service-lifecycle.py
       - run: python3 scripts/check-updates.py
       - run: python3 scripts/check-shortcuts.py
+      - run: python3 scripts/check-cache-scope.py

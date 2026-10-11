@@ -8,10 +8,25 @@
 - **Check for updates:** find a compatible GitHub release and open Decky's installer.
 - **Cache drive:** selected SSD/NVMe, active partition count and occupied cache space.
 - **Library drives:** one on/off switch per eligible partition.
+- **Cache scope:** use the entire selected drives or choose specific folders on them.
 - **Cached games:** Steam and non-Steam shortcut names, existing Steam artwork and attributed cache sizes.
+- **Other cached data:** always the last tile, showing occupied cache outside the displayed game entries.
 - **Information buttons:** details without filling the main panel with text.
 
 You normally leave the selected library drives enabled and launch games as usual.
+
+## Choose folders or whole drives
+
+Under **Cache scope**, choose **Entire selected drives** or **Selected folders**. Add a Steam library
+with the shortcut button, or choose **Add folder...** for another Steam, DRM-free or ROM folder.
+You can select multiple folders on enabled drives. Select a folder row to remove it from the selection.
+
+![Selected folders and the Other cached data tile](../images/cache-folders.png)
+
+Writes during copying, installation and Steam updates do not allocate new cache blocks.
+Reads for copying, unpacking or verification can fill cache within the chosen scope.
+Folder mode is not a gameplay-only filter; unidentifiable reads bypass cache in this mode.
+Changing scope keeps existing cached data and does not remount a library.
 
 ## Temporarily turn caching off
 
@@ -39,7 +54,10 @@ Select a game tile for details. Games that share one installation folder are gro
 
 A background Steam read can add a game that you have not launched. The size is **partial attribution**,
 not the installation size, a full-game copy or an exact inventory of current game files.
-Unclassified reads still use cache and are included in the drive's total.
+In whole-drive mode, unclassified reads can populate cache and are included in the drive's total.
+Folder mode does not admit unclassified reads. The final **Other cached data** tile includes blocks
+outside the current game list, including earlier cached data and selected-folder fallback classes.
+Its size excludes all listed games, including collapsed small fragments.
 [How it works](How-It-Works.md) explains the limits.
 
 ## Clear cache
@@ -48,13 +66,13 @@ Choose **Clear cache**, then confirm.
 
 This removes cached copies for all selected active library partitions. It keeps the games on the HDD,
 the prepared NVMe filesystem and your drive selection. It does not format the SSD or unmount libraries.
-New reads and writes may refill the cache immediately, so it may not stay at zero.
+New eligible reads may refill the cache immediately, so it may not stay at zero.
 
 There is no per-game clear operation in this release.
 
 ## Steam updates
 
-Update games normally in Steam. DeckyCache uses **writethrough**:
+Update games normally in Steam. DeckyCache uses **write-around**:
 writes go to the original HDD through Open CAS, which keeps cached data coherent.
 There is one original installation, not an independently updated SSD copy.
 

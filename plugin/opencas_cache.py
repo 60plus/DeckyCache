@@ -1,4 +1,4 @@
-"""Open CAS writethrough adapter. Only the selected cache image is initialized."""
+"""Open CAS write-around adapter. Only the selected cache image is initialized."""
 import csv
 import hashlib
 import io
@@ -8,6 +8,7 @@ from pathlib import Path
 import platform
 
 from block_cache import BlockCache, devno
+from cache_scope import scope_rows
 
 VERSION = "26.09.0.1102.release"
 LINE_KIB = 64
@@ -125,7 +126,7 @@ class OpenCasCache(BlockCache):
         self.verify_cache_device(lib)
         cache = self.stats(lib, "-f", "conf,usage,req")
         core = self.stats(lib, "-j", "1", "-f", "conf")
-        if (cache.get("Write Policy") not in ("wt", "pt") or cache.get("Status") != "Running"
+        if (cache.get("Write Policy") not in ("wt", "wa", "pt") or cache.get("Status") != "Running"
                 or cache.get("Core Devices") != "1" or cache.get("Inactive Core Devices") != "0"
                 or int(cache["Cache line size [KiB]"]) != LINE_KIB
                 or core.get("Status") != "Active"
@@ -143,11 +144,11 @@ class OpenCasCache(BlockCache):
         }
 
     def desired_mode(self):
-        return "wt" if self.m.config.get("enabled", True) else "pt"
+        return "wa" if self.m.config.get("enabled", True) else "pt"
 
     def set_mode(self, lib, mode):
-        if mode not in ("wt", "pt"):
-            raise RuntimeError("Only writethrough and bypass modes are supported.")
+        if mode not in ("wa", "pt"):
+            raise RuntimeError("Only write-around and bypass modes are supported.")
         stats = self.verify(lib)
         if stats["mode"] == mode:
             return
@@ -249,11 +250,11 @@ class OpenCasCache(BlockCache):
             if reused:
                 self.cli("-S", "-d", cache_alias, "--load", timeout=120)
             else:
-                self.cli("-S", "-i", self.cid(lib), "-d", cache_alias, "-c", self.desired_mode(), "-x", str(LINE_KIB), timeout=120)
+                self.cli("-S", "-i", self.cid(lib), "-d", cache_alias, "-c", "pt", "-x", str(LINE_KIB), timeout=120)
                 self.cli("-A", "-i", self.cid(lib), "-j", "1", "-d", origin_alias, timeout=60)
                 self.cli("-X", "-n", "seq-cutoff", "-i", self.cid(lib), "-p", "never")
             self.run("udevadm", "settle", "--timeout=15")
-            self.set_mode(lib, self.desired_mode())
+            self.set_mode(lib, "pt")
             Path(lib["path"]).mkdir(parents=True, exist_ok=True)
             self.run("mount", "-t", lib["fstype"], "-o", lib["options"], self.mapper(lib), lib["path"])
             if not self.active(lib):
@@ -319,8 +320,8 @@ class OpenCasCache(BlockCache):
                 with data.open("wb"):
                     pass
 
-    def sync_classes(self, lib):
-        """Track up to 32 distinct game folders; ordinary caching never depends on classification."""
+    def class_plan(self, lib):
+        """Keep old class IDs and restrict new reads to the selected scope."""
         catalog = self.m.catalog([dict(lib, active=True, enabled=True)])
         current = {}
         for game in catalog:
@@ -339,18 +340,18 @@ class OpenCasCache(BlockCache):
             current.setdefault(str(path), []).append(game)
         record = self.directory(lib) / "classes.json"
         saved = json.loads(record.read_text()) if record.exists() else []
-        # Never give a cached class ID to a different folder. A cold cache may start a fresh map.
-        known = {row["path"] for row in saved}
-        for path in sorted(current):
-            if path not in known and len(saved) < 32:
-                saved.append({"id": len(saved) + 1, "path": path})
+        roots = [folder["path"] for folder in self.m.config.get("cache_folders", [])
+                 if folder["uuid"] == lib["uuid"]]
+        saved, rows = scope_rows(saved, current, self.m.config.get("cache_scope", "drives"), roots)
+        return saved, current, rows
+
+    def sync_classes(self, lib):
+        saved, current, rows = self.class_plan(lib)
+        record = self.directory(lib) / "classes.json"
         output = io.StringIO()
         writer = csv.writer(output, lineterminator="\n")
         writer.writerow(["IO class id", "IO class name", "Eviction priority", "Allocation"])
-        writer.writerow([0, "unclassified", 255, 1])
-        for row in saved:
-            rule = "directory:" + row["path"] + "&file_size:gt:0&done" if row["path"] in current else "request_size:eq:0&done"
-            writer.writerow([row["id"], rule, 255, 1])
+        writer.writerows(rows)
         config = self.directory(lib) / "classes.csv"
         rules = output.getvalue()
         previous = config.read_text() if config.exists() else None
@@ -368,7 +369,10 @@ class OpenCasCache(BlockCache):
         return saved, current
 
     def cached_games(self, libraries):
-        result = {}
+        return self.cached_usage(libraries)[0]
+
+    def cached_usage(self, libraries):
+        result, total, attributed = {}, 0, 0
         for lib in libraries:
             if not lib["active"]:
                 continue
@@ -376,8 +380,14 @@ class OpenCasCache(BlockCache):
             rows = csv_rows(self.cli("-P", "-i", self.cid(lib), "-d", "-f", "conf,usage", "-o", "csv"))
             usage = {int(r["IO class ID"]): int(r["Occupancy [4KiB Blocks]"]) * 4096
                      for r in rows if r.get("IO class ID", "").isdigit()}
+            total += sum(usage.values())
+            by_path = {}
             for item in saved:
-                if usage.get(item["id"], 0):
-                    for game in current.get(item["path"], []):
-                        result[game["id"]] = dict(game, cached_bytes=usage[item["id"]])
-        return sorted(result.values(), key=lambda game: game["name"].casefold())
+                by_path[item["path"]] = by_path.get(item["path"], 0) + usage.get(item["id"], 0)
+            for path, used in by_path.items():
+                matches = current.get(path, [])
+                if used and matches:
+                    attributed += used
+                    for game in matches:
+                        result[(game["id"], game["mapper"], game["path"])] = dict(game, cached_bytes=used)
+        return sorted(result.values(), key=lambda game: game["name"].casefold()), max(0, total - attributed), total

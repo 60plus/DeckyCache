@@ -1,4 +1,4 @@
-import { callable, definePlugin } from "@decky/api";
+import { callable, definePlugin, openFilePicker, FileSelectionType } from "@decky/api";
 import {
   ConfirmModal, DialogButton, DropdownItem, PanelSection, PanelSectionRow,
   ProgressBar, showModal, staticClasses, ToggleField,
@@ -46,6 +46,9 @@ type Status = {
   cache: { uuid: string; model: string; serial: string } | null;
   devices: Disk[]; libraries: Library[]; games: Game[]; games_state: "ready" | "updating" | "unavailable"; error: string;
   usage: { total: number; used: number } | null;
+  other_cached_bytes: number | null;
+  scope: { mode: "drives" | "folders"; folders: { path: string; uuid: string }[];
+    suggestions: { path: string; name: string }[] };
 };
 type Result = { ok: true; data: Status } | { ok: false; error: string };
 const request = callable<[Record<string, unknown>], Result>("request");
@@ -207,7 +210,7 @@ function Panel() {
       strDescription={<>
         {game.cached_bytes !== undefined && <p>{trackedSize(game.cached_bytes)} of tracked cache data.</p>}
         {game.titles.length > 1 && <p>Shared installation folder: {game.titles.join(", ")}.</p>}
-        <p>This is a partial count, not the size of the complete installation. Background reads can add data even if the game has not been launched.</p>
+        <p>This is a partial count, not the size of the complete installation. New blocks are cached from reads within the selected drives or folders. This includes background reads and copying from those locations. Writes do not allocate new cache blocks.</p>
         <p>The cache engine cannot clear all cached data for just this game. Cached blocks are replaced automatically as space is needed.</p>
       </>}
       bAlertDialog strOKButtonText="Close"
@@ -233,6 +236,47 @@ function Panel() {
     </div>;
   }
 
+  async function addFolder() {
+    try {
+      const start = state?.libraries.find(lib => lib.active)?.path ?? "/run/media/deck";
+      const picked = await openFilePicker(FileSelectionType.FOLDER, start, false, true);
+      if (picked.realpath || picked.path) {
+        await act({ action: "folder", path: picked.realpath || picked.path, enabled: true }, "Adding folder...");
+      }
+    } catch (e) {
+      // Decky's picker rejects when cancelled.
+      if (e && !String(e).toLowerCase().includes("cancel")) setError(String(e));
+    }
+  }
+
+  function removeFolder(path: string) {
+    showModal(<ConfirmModal strTitle="Remove folder from cache selection?"
+      strDescription={<><p>{path}</p><p>The folder and its files stay on the HDD. Previously cached blocks may remain until replaced or cleared.</p></>}
+      strOKButtonText="Remove selection" strCancelButtonText="Cancel"
+      onOK={() => void act({ action: "folder", path, enabled: false }, "Removing folder selection...")} />);
+  }
+
+  function otherCacheCard() {
+    if (state?.engine !== "opencas" || state.other_cached_bytes === null || state.other_cached_bytes === undefined) return null;
+    return <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
+      <DialogButton className="DeckyCacheGame DeckyCacheOther"
+        onClick={() => showModal(<ConfirmModal strTitle="Other cached data"
+          strDescription={<>
+            <p>{trackedSize(state.other_cached_bytes!)} of cached data outside the listed games.</p>
+            <p>This includes unassigned blocks and data attributed to old game paths. Data saved by earlier versions stays until replaced or cleared.</p>
+            <p>Small fragments shown above are counted with their games, not in this tile.</p>
+          </>} bAlertDialog strOKButtonText="Close" />)}
+        style={{ padding: 0, minWidth: 0, width: "100%", overflow: "hidden", borderRadius: 8, textAlign: "left" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "100%",
+          aspectRatio: "460/215", background: "#142c36", color: "#70d4b0", fontSize: 42 }}><Icon /></div>
+        <div style={{ fontSize: 12, padding: 8, lineHeight: "1.35", whiteSpace: "normal" }}>
+          <div>Other cached data</div>
+          <div style={{ color: "#aeb8c6", marginTop: 4 }}>{trackedSize(state.other_cached_bytes)}</div>
+        </div>
+      </DialogButton>
+    </div>;
+  }
+
   function clearCache() {
     if (!state?.cache) return;
     const cache = state.cache;
@@ -240,7 +284,7 @@ function Panel() {
       strTitle="Clear all cached data?"
       strDescription={<>
         <p>Remove cached copies from {cache.model} for all selected library drives?</p>
-        <p>Games on the HDD, the NVMe format and your settings are kept. Cache fills again as data is used.</p>
+        <p>Games on the HDD, the NVMe format and your settings are kept. Cache fills again as selected data is read.</p>
       </>}
       strOKButtonText="Clear cache" strCancelButtonText="Cancel" bDestructiveWarning
       onOK={() => void act({ action: "clear-cache", confirmed: true, cache_uuid: cache.uuid }, "Clearing cache…")}
@@ -289,7 +333,7 @@ function Panel() {
       <PanelSection>
         <SectionHeading title="Cache drive" help={<>
           <p>The SSD/NVMe stores cached copies. Original games stay on the HDD and Steam updates continue to write there.</p>
-          <p>The usage bar shows actual cached data. Clear cache removes these copies without formatting the NVMe. Data is cached again as it is read.</p>
+          <p>The usage bar shows actual cached data. Clear cache removes these copies without formatting the NVMe. Writes do not allocate new cache blocks. Reads from the selected scope can populate it, including copying from those locations.</p>
           <p>Drive settings lets you reuse or format an additional SSD/NVMe. The system drive is excluded.</p>
         </>} />
         {state.cache && <>
@@ -329,7 +373,7 @@ function Panel() {
       <SectionDivider />
       <PanelSection>
         <SectionHeading title="Library drives" help={<>
-          <p>Select one or more partitions. Each switch is independent; all folders on a selected partition use cache.</p>
+          <p>Select one or more partitions. Each switch is independent; choose which drives are connected to cache, then optionally limit new cached reads to selected folders.</p>
           {state.libraries.map(lib => <p key={lib.path}>{lib.name}<br />{lib.path}</p>)}
         </>} />
         {state.libraries.map(lib => <PanelSectionRow key={lib.path}>
@@ -339,13 +383,46 @@ function Panel() {
             onChange={enabled => void act({ action: "library", path: lib.path, enabled }, "Saving drive selection…")}
           />
         </PanelSectionRow>)}
+        <div style={{ marginTop: 16 }}>
+          <SectionHeading title="Cache scope" help={<>
+            <p>Entire selected drives caches reads anywhere on the enabled drives.</p>
+            <p>Selected folders only admits reads that Open CAS can associate with those folders. Some direct or unrecognized reads bypass cache.</p>
+            <p>Reading files for copying or verification can fill cache in either mode. Writes from copying, installation and Steam updates do not allocate new cache blocks. Steam updates remain coherent.</p>
+            <p>Changing scope keeps the current cache and library mounts. Previously cached data may remain until replaced or cleared.</p>
+          </>} />
+          <PanelSectionRow><DropdownItem label="Cache"
+            rgOptions={[{ data: "drives", label: "Entire selected drives" }, { data: "folders", label: "Selected folders" }]}
+            selectedOption={state.scope?.mode ?? "drives"} disabled={!!working || !state.cache}
+            onChange={o => void act({ action: "scope", scope: String(o.data) }, "Saving cache scope...")} /></PanelSectionRow>
+          <div style={note}>Read cache · writes stay on the HDD</div>
+          {state.scope?.mode === "folders" && <>
+            <div className="DeckyCacheFolderList" style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 6 }}>
+            {state.scope.folders.map(folder => <PanelSectionRow key={folder.path}>
+              <DialogButton disabled={!!working} onClick={() => removeFolder(folder.path)}
+                style={{ whiteSpace: "normal", overflowWrap: "anywhere", fontSize: 12 }}>
+                {folder.path.split("/").slice(-2).join("/")}
+              </DialogButton>
+            </PanelSectionRow>)}
+            {state.scope.suggestions.filter(folder => !state.scope.folders.some(item => item.path === folder.path)).map(folder =>
+              <PanelSectionRow key={folder.path}><DialogButton disabled={!!working}
+                onClick={() => void act({ action: "folder", path: folder.path, enabled: true }, "Adding Steam library...")}>
+                Add Steam library
+              </DialogButton></PanelSectionRow>)}
+            <PanelSectionRow><DialogButton disabled={!!working || !active} onClick={() => void addFolder()}>
+              Add folder...
+            </DialogButton></PanelSectionRow>
+            </div>
+            {!state.scope.folders.length && <div style={note}>Choose a folder on an enabled drive to start caching new reads.</div>}
+          </>}
+        </div>
       </PanelSection>
       <SectionDivider />
       <PanelSection>
         <SectionHeading title={"Cached games" + (state.games_state === "ready" ? " · " + mainGames.length : "")} help={<>
           <p>The main list shows at least 16 MiB of tracked data per installation folder. Smaller entries are under Small fragments.</p>
           <p>Steam games and non-Steam shortcuts with a direct game path on a selected drive are detected automatically. Custom artwork comes from Steam.</p>
-          <p>These figures are partial. Unassigned data is included in the cache drive total. Background reads can add entries even if a game has not been launched.</p>
+          <p>These figures are partial. Other cached data accounts for cached blocks outside the currently listed games, including data saved by earlier versions.
+            New cache data comes from reads in the selected scope. Writes go to the HDD and keep affected cached blocks coherent.</p>
           <p>Games sharing a folder use one entry. Select a game for details. To remove all cached copies, use Clear cache above.</p>
         </>} />
         {state.games_state !== "ready"
@@ -358,6 +435,7 @@ function Panel() {
               </DialogButton></PanelSectionRow>
               {showSmall && <div style={{ marginTop: 12 }}>{gameGrid(smallGames)}</div>}
             </div>}
+            {otherCacheCard()}
           </>}
       </PanelSection>
     </>}

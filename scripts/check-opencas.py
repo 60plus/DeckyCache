@@ -72,4 +72,27 @@ class ClearCacheBoundaries(unittest.TestCase):
             manager.clear_cache({"confirmed": True, "cache_uuid": "selected-ssd"})
         self.assertEqual(manager.block.clear.call_count, 2)
 
+
+class CacheAccounting(unittest.TestCase):
+    def test_other_excludes_shared_games_small_fragments_and_spillover(self):
+        engine = cas.OpenCasCache.__new__(cas.OpenCasCache)
+        a = {"id": "1", "name": "A", "mapper": "/dev/cas1-1", "path": "/a"}
+        b = dict(a, id="2", name="B")
+        small = dict(a, id="3", name="Small", path="/small")
+        engine.sync_classes = Mock(return_value=(
+            [{"id": 1, "path": "/a"}, {"id": 2, "path": "/old"},
+             {"id": 3, "path": "/small"}, {"id": 4, "path": "/a"}],
+            {"/a": [a, b], "/small": [small]}))
+        engine.cli = Mock(return_value="""IO class ID,Occupancy [4KiB Blocks]\n0,100\n1,10\n2,20\n3,1\n4,5\n33,0\n""")
+        games, other, total = engine.cached_usage([{"active": True, "cas_id": 1}])
+        self.assertEqual(total, 136 * 4096)
+        self.assertEqual(other, 120 * 4096)
+        self.assertEqual([g["cached_bytes"] for g in games], [15 * 4096, 15 * 4096, 4096])
+
+    def test_empty_cache_has_zero_other(self):
+        engine = cas.OpenCasCache.__new__(cas.OpenCasCache)
+        engine.sync_classes = Mock(return_value=([], {}))
+        engine.cli = Mock(return_value="""IO class ID,Occupancy [4KiB Blocks]\n0,0\n""")
+        self.assertEqual(engine.cached_usage([{"active": True, "cas_id": 1}]), ([], 0, 0))
+
 if __name__=="__main__":unittest.main()
